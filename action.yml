@@ -1,0 +1,16 @@
+name: 'Polder Drift — Design System Drift Alerts'
+description: 'Flags component imports that bypass your registered design system on every PR'
+author: 'Polder HQ'
+branding:
+  icon: 'eye'
+  color: 'purple'
+
+inputs:
+  github-token:
+    description: 'GitHub token with pull-requests: write permission'
+    required: true
+    default: ${{ github.token }}
+
+runs:
+  using: node20
+  main: dist/index.js

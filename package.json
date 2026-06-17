@@ -1,0 +1,61 @@
+{
+  "name": "@usepolder/drift",
+  "version": "1.0.0",
+  "description": "Design system drift detection for TypeScript/JavaScript. Flags components that bypass your registered design system, as a GitHub Action or a local CLI.",
+  "license": "Apache-2.0",
+  "author": "Polder HQ",
+  "homepage": "https://github.com/usepolder/drift#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/usepolder/drift.git"
+  },
+  "bugs": {
+    "url": "https://github.com/usepolder/drift/issues"
+  },
+  "keywords": [
+    "design-system",
+    "drift",
+    "lint",
+    "linter",
+    "react",
+    "components",
+    "github-action",
+    "code-review",
+    "codemod"
+  ],
+  "main": "dist/index.js",
+  "bin": {
+    "polder-drift": "dist/cli/index.js"
+  },
+  "files": [
+    "dist",
+    "action.yml",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "ncc build src/index.ts -o dist --source-map --license licenses.txt",
+    "build:cli": "ncc build src/cli.ts -o dist/cli --license licenses.txt",
+    "build:all": "npm run build && npm run build:cli",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@actions/core": "^1.10.1",
+    "@actions/github": "^6.0.0",
+    "@babel/parser": "^7.24.0",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.0.0",
+    "@vercel/ncc": "^0.38.1",
+    "typescript": "^5.4.0",
+    "vitest": "^1.6.0"
+  }
+}
