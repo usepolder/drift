@@ -19,7 +19,7 @@ Node 20+.
 
 One pure engine, several thin surfaces:
 
-```
+```text
 src/parser.ts        Pure detection engine (Babel AST + token fingerprints). No I/O.
 src/comment/         Platform-agnostic comment core: findings + stable ids,
                      suppression (.polderignore), adoption %, new-in-PR diffing, render.
