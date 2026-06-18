@@ -1,5 +1,8 @@
 # polder-drift
 
+[![CI](https://github.com/usepolder/drift/actions/workflows/ci.yml/badge.svg)](https://github.com/usepolder/drift/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
 Design system drift detection for TypeScript/JavaScript codebases. It flags components
 that bypass your registered design system: local imports of DS components, in-file
 shadows of DS exports, hardcoded design tokens, and prop/sub-component look-alikes.
