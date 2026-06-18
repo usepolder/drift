@@ -4140,8 +4140,9 @@ exports.runScan = runScan;
 const fs = __importStar(__nccwpck_require__(896));
 const path = __importStar(__nccwpck_require__(928));
 const child_process_1 = __nccwpck_require__(317);
-const config_1 = __nccwpck_require__(973);
+const resolve_config_1 = __nccwpck_require__(190);
 const parser_1 = __nccwpck_require__(196);
+const init_1 = __nccwpck_require__(722);
 const SOURCE_RE = /\.(ts|tsx|js|jsx)$/;
 const TOP_HELP = `polder-drift — design system drift detection
 
@@ -4151,6 +4152,7 @@ Usage:
 Commands:
   scan [options] [files...]   Analyse files for design system drift (default work)
   ci                          Post the drift comment from a CI PR build (Azure DevOps)
+  init                        Write a starter .polder.yml (auto-detects your design system)
   -h, --help                  Show this help
 
 Examples:
@@ -4400,7 +4402,10 @@ function runCli(argv) {
         process.stderr.write("polder-drift: 'ci' runs as the process entrypoint, not via runCli().\n");
         return 2;
     }
-    if (first === 'mcp' || first === 'telemetry' || first === 'init') {
+    if (first === 'init') {
+        return (0, init_1.runInitSubcommand)(argv.slice(1));
+    }
+    if (first === 'mcp' || first === 'telemetry') {
         process.stderr.write(`polder-drift: '${first}' is not available yet.\n`);
         return 2;
     }
@@ -4429,26 +4434,23 @@ function runScan(argv) {
         process.stdout.write(HELP);
         return 0;
     }
-    let configContent;
+    let resolved;
     try {
-        configContent = fs.readFileSync(opts.configPath, 'utf8');
-    }
-    catch {
-        process.stderr.write(`polder-drift: no config found at ${opts.configPath}. ` +
-            `Create a .polder.yml with at least:\n  component_library: "@your-org/design-system"\n`);
-        return 2;
-    }
-    let config;
-    try {
-        config = (0, config_1.readConfig)(configContent);
+        resolved = (0, resolve_config_1.resolveConfig)(opts.cwd, opts.configPath);
     }
     catch (err) {
         process.stderr.write(`polder-drift: invalid .polder.yml — ${err.message}\n`);
         return 2;
     }
-    if (!config) {
-        process.stderr.write('polder-drift: empty or invalid .polder.yml\n');
+    if (!resolved) {
+        process.stderr.write(`polder-drift: no .polder.yml at ${opts.configPath} and could not auto-detect a ` +
+            `design system from package.json. Run \`polder-drift init\`, or create a .polder.yml:\n` +
+            `  component_library: "@your-org/design-system"\n`);
         return 2;
+    }
+    const config = resolved.config;
+    if (resolved.source === 'detected') {
+        process.stderr.write(`polder-drift: no .polder.yml; auto-detected design system: ${config.componentLibrary.join(', ')}\n`);
     }
     let files;
     try {
@@ -4526,6 +4528,76 @@ async function runCiSubcommand(_argv) {
         (res.adoptionPct !== undefined ? `, adoption ${res.adoptionPct.toFixed(0)}%` : '') +
         '\n');
     return res.failed ? 1 : 0;
+}
+
+
+/***/ }),
+
+/***/ 722:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.runInitSubcommand = runInitSubcommand;
+/**
+ * `polder-drift init` — write a starter `.polder.yml`, seeded from detection when possible.
+ */
+const fs = __importStar(__nccwpck_require__(896));
+const path = __importStar(__nccwpck_require__(928));
+const detect_1 = __nccwpck_require__(52);
+function runInitSubcommand(_argv, cwd = process.cwd()) {
+    const target = path.join(cwd, '.polder.yml');
+    if (fs.existsSync(target)) {
+        process.stderr.write('polder-drift init: .polder.yml already exists; leaving it untouched.\n');
+        return 1;
+    }
+    const det = (0, detect_1.detectComponentLibrary)(cwd);
+    const libs = det.libraries.length > 0 ? det.libraries : ['@your-org/design-system'];
+    const libYaml = libs.length === 1
+        ? `component_library: "${libs[0]}"`
+        : `component_library:\n${libs.map((l) => `  - "${l}"`).join('\n')}`;
+    const content = `${libYaml}\nallowlist: []\nfail_on_drift: false\n`;
+    fs.writeFileSync(target, content);
+    if (det.source === 'detected') {
+        process.stdout.write(`polder-drift init: wrote .polder.yml (detected ${libs.join(', ')}).\n`);
+    }
+    else {
+        process.stdout.write('polder-drift init: wrote .polder.yml — edit component_library to your design system package.\n');
+    }
+    return 0;
 }
 
 
@@ -4948,6 +5020,86 @@ function readConfig(content) {
     if (content === null)
         return null;
     return parseConfig(content);
+}
+
+
+/***/ }),
+
+/***/ 52:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.KNOWN_DS_PACKAGES = void 0;
+exports.detectComponentLibrary = detectComponentLibrary;
+/**
+ * Zero-config: detect the design-system package from package.json so a `.polder.yml`
+ * is not required in the common case. Explicit config always wins (see resolve-config).
+ */
+const fs = __importStar(__nccwpck_require__(896));
+const path = __importStar(__nccwpck_require__(928));
+/** Curated, well-known design-system packages, matched against deps/peerDeps. */
+exports.KNOWN_DS_PACKAGES = [
+    '@carbon/react',
+    '@mui/material',
+    '@chakra-ui/react',
+    '@mantine/core',
+    'antd',
+    '@fluentui/react',
+    '@fluentui/react-components',
+    '@shopify/polaris',
+    'react-bootstrap',
+    '@primer/react',
+    '@adobe/react-spectrum',
+    '@radix-ui/themes',
+    '@nextui-org/react',
+    '@heroui/react',
+    'grommet',
+];
+function detectComponentLibrary(cwd, known = exports.KNOWN_DS_PACKAGES) {
+    let pkg;
+    try {
+        pkg = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'));
+    }
+    catch {
+        return { libraries: [], source: 'none' };
+    }
+    const deps = { ...(pkg.dependencies ?? {}), ...(pkg.peerDependencies ?? {}) };
+    const libraries = known.filter((k) => k in deps);
+    return libraries.length > 0 ? { libraries, source: 'detected' } : { libraries: [], source: 'none' };
 }
 
 
@@ -5755,6 +5907,76 @@ function diffChangedFiles(cwd, baseRef) {
 
 /***/ }),
 
+/***/ 190:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.resolveConfig = resolveConfig;
+/**
+ * Resolve a PolderConfig for a run. Precedence:
+ *   1. An explicit `.polder.yml` (always wins; throws on invalid YAML).
+ *   2. Otherwise, zero-config detection of the DS package from package.json.
+ *   3. Otherwise null (caller shows guidance).
+ */
+const fs = __importStar(__nccwpck_require__(896));
+const config_1 = __nccwpck_require__(973);
+const detect_1 = __nccwpck_require__(52);
+function resolveConfig(cwd, configPath) {
+    let content = null;
+    try {
+        content = fs.readFileSync(configPath, 'utf8');
+    }
+    catch {
+        /* no file — fall through to detection */
+    }
+    if (content !== null) {
+        const config = (0, config_1.readConfig)(content); // throws on invalid YAML; null only for empty
+        return config ? { config, source: 'file' } : null;
+    }
+    const det = (0, detect_1.detectComponentLibrary)(cwd);
+    if (det.libraries.length > 0) {
+        return { config: { componentLibrary: det.libraries, allowlist: [], failOnDrift: false }, source: 'detected' };
+    }
+    return null;
+}
+
+
+/***/ }),
+
 /***/ 479:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -5802,20 +6024,12 @@ exports.runCi = runCi;
  */
 const fs = __importStar(__nccwpck_require__(896));
 const path = __importStar(__nccwpck_require__(928));
-const config_1 = __nccwpck_require__(973);
+const resolve_config_1 = __nccwpck_require__(190);
 const parser_1 = __nccwpck_require__(196);
 const analyze_1 = __nccwpck_require__(701);
 const suppress_1 = __nccwpck_require__(10);
 const render_1 = __nccwpck_require__(665);
 const git_1 = __nccwpck_require__(160);
-function loadConfigFromWorkspace(workspace) {
-    try {
-        return (0, config_1.readConfig)(fs.readFileSync(path.join(workspace, '.polder.yml'), 'utf8'));
-    }
-    catch {
-        return null;
-    }
-}
 function resolveDsExports(config, workspace, warn) {
     const nodeModules = path.join(workspace, 'node_modules');
     const dsExports = new Set();
@@ -5832,10 +6046,21 @@ function resolveDsExports(config, workspace, warn) {
 async function runCi(platform, opts = {}) {
     const warn = opts.warn ?? ((m) => process.stderr.write(m + '\n'));
     const workspace = platform.workspace;
-    const config = loadConfigFromWorkspace(workspace);
-    if (!config) {
-        warn('Polder Drift: no .polder.yml found; nothing to check.');
+    let resolved;
+    try {
+        resolved = (0, resolve_config_1.resolveConfig)(workspace, path.join(workspace, '.polder.yml'));
+    }
+    catch (err) {
+        warn(`Polder Drift: invalid .polder.yml — ${err.message}`);
         return { status: 'no-config', newFindings: 0, totalFindings: 0, posted: false, failed: false };
+    }
+    if (!resolved) {
+        warn('Polder Drift: no .polder.yml and could not auto-detect a design system; nothing to check.');
+        return { status: 'no-config', newFindings: 0, totalFindings: 0, posted: false, failed: false };
+    }
+    const config = resolved.config;
+    if (resolved.source === 'detected') {
+        warn(`Polder Drift: no .polder.yml; auto-detected design system: ${config.componentLibrary.join(', ')}`);
     }
     const dsExports = resolveDsExports(config, workspace, warn);
     const suppress = (0, suppress_1.loadSuppressions)(workspace);

@@ -6,7 +6,8 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
-import { readConfig, type PolderConfig } from './config';
+import { type PolderConfig } from './config';
+import { resolveConfig } from './resolve-config';
 import { resolveExports } from './parser';
 import { analyzePr } from './comment/analyze';
 import { loadSuppressions } from './comment/suppress';
@@ -21,14 +22,6 @@ export interface RunCiResult {
   adoptionPct?: number;
   posted: boolean;
   failed: boolean;
-}
-
-function loadConfigFromWorkspace(workspace: string): PolderConfig | null {
-  try {
-    return readConfig(fs.readFileSync(path.join(workspace, '.polder.yml'), 'utf8'));
-  } catch {
-    return null;
-  }
 }
 
 function resolveDsExports(config: PolderConfig, workspace: string, warn: (m: string) => void): Set<string> {
@@ -51,10 +44,20 @@ export async function runCi(
   const warn = opts.warn ?? ((m: string) => process.stderr.write(m + '\n'));
   const workspace = platform.workspace;
 
-  const config = loadConfigFromWorkspace(workspace);
-  if (!config) {
-    warn('Polder Drift: no .polder.yml found; nothing to check.');
+  let resolved;
+  try {
+    resolved = resolveConfig(workspace, path.join(workspace, '.polder.yml'));
+  } catch (err) {
+    warn(`Polder Drift: invalid .polder.yml — ${(err as Error).message}`);
     return { status: 'no-config', newFindings: 0, totalFindings: 0, posted: false, failed: false };
+  }
+  if (!resolved) {
+    warn('Polder Drift: no .polder.yml and could not auto-detect a design system; nothing to check.');
+    return { status: 'no-config', newFindings: 0, totalFindings: 0, posted: false, failed: false };
+  }
+  const config: PolderConfig = resolved.config;
+  if (resolved.source === 'detected') {
+    warn(`Polder Drift: no .polder.yml; auto-detected design system: ${config.componentLibrary.join(', ')}`);
   }
 
   const dsExports = resolveDsExports(config, workspace, warn);

@@ -161,7 +161,7 @@ describe('runCli dispatch', () => {
   });
 
   it('reserved-but-unbuilt subcommands report not-available, exit 2', () => {
-    for (const cmd of ['mcp', 'telemetry', 'init']) {
+    for (const cmd of ['mcp', 'telemetry']) {
       const { code, err } = capture(() => runCli([cmd]));
       expect(code).toBe(2);
       expect(err).toContain('not available yet');
@@ -236,13 +236,26 @@ describe('runScan (post-refactor scan still works)', () => {
     });
   });
 
-  it('missing config → exit 2 with guidance', () => {
+  it('no config and no detectable DS → exit 2 with guidance', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'polder-noconfig-'));
-    fs.writeFileSync(path.join(dir, 'clean.tsx'), 'export const a = 1;\n');
+    fs.writeFileSync(path.join(dir, 'clean.tsx'), 'export const a = 1;\n'); // no package.json → no detection
     try {
       const { code, err } = capture(() => runScan(['--cwd', dir, 'clean.tsx']));
       expect(code).toBe(2);
-      expect(err).toContain('no config found');
+      expect(err).toContain('could not auto-detect');
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('zero-config: detects DS from package.json when no .polder.yml', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'polder-detect-'));
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ dependencies: { '@mui/material': '^5' } }));
+    fs.writeFileSync(path.join(dir, 'clean.tsx'), 'export const a = 1;\n');
+    try {
+      const { code, err } = capture(() => runScan(['--cwd', dir, 'clean.tsx']));
+      expect(code).toBe(0);
+      expect(err).toContain('auto-detected design system: @mui/material');
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

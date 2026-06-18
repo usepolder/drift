@@ -2,8 +2,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
-import { readConfig, type PolderConfig } from './config';
+import { type PolderConfig } from './config';
+import { resolveConfig, type ResolvedConfig } from './resolve-config';
 import { resolveExports, checkDriftFull, type FullDriftResult } from './parser';
+import { runInitSubcommand } from './commands/init';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -44,6 +46,7 @@ Usage:
 Commands:
   scan [options] [files...]   Analyse files for design system drift (default work)
   ci                          Post the drift comment from a CI PR build (Azure DevOps)
+  init                        Write a starter .polder.yml (auto-detects your design system)
   -h, --help                  Show this help
 
 Examples:
@@ -331,7 +334,11 @@ export function runCli(argv: string[]): number {
     return 2;
   }
 
-  if (first === 'mcp' || first === 'telemetry' || first === 'init') {
+  if (first === 'init') {
+    return runInitSubcommand(argv.slice(1));
+  }
+
+  if (first === 'mcp' || first === 'telemetry') {
     process.stderr.write(`polder-drift: '${first}' is not available yet.\n`);
     return 2;
   }
@@ -367,27 +374,26 @@ export function runScan(argv: string[]): number {
     return 0;
   }
 
-  let configContent: string;
+  let resolved: ResolvedConfig | null;
   try {
-    configContent = fs.readFileSync(opts.configPath, 'utf8');
-  } catch {
-    process.stderr.write(
-      `polder-drift: no config found at ${opts.configPath}. ` +
-        `Create a .polder.yml with at least:\n  component_library: "@your-org/design-system"\n`,
-    );
-    return 2;
-  }
-
-  let config: PolderConfig | null;
-  try {
-    config = readConfig(configContent);
+    resolved = resolveConfig(opts.cwd, opts.configPath);
   } catch (err) {
     process.stderr.write(`polder-drift: invalid .polder.yml — ${(err as Error).message}\n`);
     return 2;
   }
-  if (!config) {
-    process.stderr.write('polder-drift: empty or invalid .polder.yml\n');
+  if (!resolved) {
+    process.stderr.write(
+      `polder-drift: no .polder.yml at ${opts.configPath} and could not auto-detect a ` +
+        `design system from package.json. Run \`polder-drift init\`, or create a .polder.yml:\n` +
+        `  component_library: "@your-org/design-system"\n`,
+    );
     return 2;
+  }
+  const config = resolved.config;
+  if (resolved.source === 'detected') {
+    process.stderr.write(
+      `polder-drift: no .polder.yml; auto-detected design system: ${config.componentLibrary.join(', ')}\n`,
+    );
   }
 
   let files: string[];

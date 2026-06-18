@@ -34464,6 +34464,87 @@ function readConfig(content) {
 
 /***/ }),
 
+/***/ 1052:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.KNOWN_DS_PACKAGES = void 0;
+exports.detectComponentLibrary = detectComponentLibrary;
+/**
+ * Zero-config: detect the design-system package from package.json so a `.polder.yml`
+ * is not required in the common case. Explicit config always wins (see resolve-config).
+ */
+const fs = __importStar(__nccwpck_require__(9896));
+const path = __importStar(__nccwpck_require__(6928));
+/** Curated, well-known design-system packages, matched against deps/peerDeps. */
+exports.KNOWN_DS_PACKAGES = [
+    '@carbon/react',
+    '@mui/material',
+    '@chakra-ui/react',
+    '@mantine/core',
+    'antd',
+    '@fluentui/react',
+    '@fluentui/react-components',
+    '@shopify/polaris',
+    'react-bootstrap',
+    '@primer/react',
+    '@adobe/react-spectrum',
+    '@radix-ui/themes',
+    '@nextui-org/react',
+    '@heroui/react',
+    'grommet',
+];
+function detectComponentLibrary(cwd, known = exports.KNOWN_DS_PACKAGES) {
+    let pkg;
+    try {
+        pkg = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'));
+    }
+    catch {
+        return { libraries: [], source: 'none' };
+    }
+    const deps = { ...(pkg.dependencies ?? {}), ...(pkg.peerDependencies ?? {}) };
+    const libraries = known.filter((k) => k in deps);
+    return libraries.length > 0 ? { libraries, source: 'detected' } : { libraries: [], source: 'none' };
+}
+
+
+/***/ }),
+
 /***/ 9407:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -35336,6 +35417,77 @@ exports.GitHubPlatform = GitHubPlatform;
 
 /***/ }),
 
+/***/ 9190:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+"use strict";
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.resolveConfig = resolveConfig;
+/**
+ * Resolve a PolderConfig for a run. Precedence:
+ *   1. An explicit `.polder.yml` (always wins; throws on invalid YAML).
+ *   2. Otherwise, zero-config detection of the DS package from package.json.
+ *   3. Otherwise null (caller shows guidance).
+ */
+const fs = __importStar(__nccwpck_require__(9896));
+const config_1 = __nccwpck_require__(2973);
+const detect_1 = __nccwpck_require__(1052);
+function resolveConfig(cwd, configPath) {
+    let content = null;
+    try {
+        content = fs.readFileSync(configPath, 'utf8');
+    }
+    catch {
+        /* no file — fall through to detection */
+    }
+    if (content !== null) {
+        const config = (0, config_1.readConfig)(content); // throws on invalid YAML; null only for empty
+        return config ? { config, source: 'file' } : null;
+    }
+    const det = (0, detect_1.detectComponentLibrary)(cwd);
+    if (det.libraries.length > 0) {
+        return { config: { componentLibrary: det.libraries, allowlist: [], failOnDrift: false }, source: 'detected' };
+    }
+    return null;
+}
+
+
+/***/ }),
+
 /***/ 2860:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -35384,20 +35536,12 @@ exports.runCi = runCi;
  */
 const fs = __importStar(__nccwpck_require__(9896));
 const path = __importStar(__nccwpck_require__(6928));
-const config_1 = __nccwpck_require__(2973);
+const resolve_config_1 = __nccwpck_require__(9190);
 const parser_1 = __nccwpck_require__(7196);
 const analyze_1 = __nccwpck_require__(3701);
 const suppress_1 = __nccwpck_require__(10);
 const render_1 = __nccwpck_require__(5665);
 const git_1 = __nccwpck_require__(9160);
-function loadConfigFromWorkspace(workspace) {
-    try {
-        return (0, config_1.readConfig)(fs.readFileSync(path.join(workspace, '.polder.yml'), 'utf8'));
-    }
-    catch {
-        return null;
-    }
-}
 function resolveDsExports(config, workspace, warn) {
     const nodeModules = path.join(workspace, 'node_modules');
     const dsExports = new Set();
@@ -35414,10 +35558,21 @@ function resolveDsExports(config, workspace, warn) {
 async function runCi(platform, opts = {}) {
     const warn = opts.warn ?? ((m) => process.stderr.write(m + '\n'));
     const workspace = platform.workspace;
-    const config = loadConfigFromWorkspace(workspace);
-    if (!config) {
-        warn('Polder Drift: no .polder.yml found; nothing to check.');
+    let resolved;
+    try {
+        resolved = (0, resolve_config_1.resolveConfig)(workspace, path.join(workspace, '.polder.yml'));
+    }
+    catch (err) {
+        warn(`Polder Drift: invalid .polder.yml — ${err.message}`);
         return { status: 'no-config', newFindings: 0, totalFindings: 0, posted: false, failed: false };
+    }
+    if (!resolved) {
+        warn('Polder Drift: no .polder.yml and could not auto-detect a design system; nothing to check.');
+        return { status: 'no-config', newFindings: 0, totalFindings: 0, posted: false, failed: false };
+    }
+    const config = resolved.config;
+    if (resolved.source === 'detected') {
+        warn(`Polder Drift: no .polder.yml; auto-detected design system: ${config.componentLibrary.join(', ')}`);
     }
     const dsExports = resolveDsExports(config, workspace, warn);
     const suppress = (0, suppress_1.loadSuppressions)(workspace);

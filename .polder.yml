@@ -1,0 +1,3 @@
+component_library: "@your-org/design-system"
+allowlist: []
+fail_on_drift: false
