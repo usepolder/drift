@@ -60,4 +60,15 @@ describe('analyzePr', () => {
     const r = analyzePr(base({ files: ['gone.tsx', 'src/X.tsx'], readCurrent: (f) => (f === 'gone.tsx' ? null : HEAD) }));
     expect(r.totalFindings).toBe(1);
   });
+
+  it('base unavailable: reports all drift honestly, never as "new", and flags the cause', () => {
+    const r = analyzePr(base({ baseAvailable: false, readBase: () => BASE_CLEAN }));
+    expect(r.baseAvailable).toBe(false);
+    expect(r.newFindings).toHaveLength(0); // never claim "new" when we can't tell
+    expect(r.totalFindings).toBe(1);
+    expect(r.shouldComment).toBe(true); // still surfaces the drift
+    expect(r.body).toContain('Base branch not available');
+    expect(r.body).toContain('fetch-depth: 0');
+    expect(r.body).not.toContain('introduced by this PR');
+  });
 });

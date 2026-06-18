@@ -4643,6 +4643,7 @@ const suppress_1 = __nccwpck_require__(10);
 const render_1 = __nccwpck_require__(665);
 const adoption_1 = __nccwpck_require__(981);
 function analyzePr(p) {
+    const baseAvailable = p.baseAvailable !== false;
     let findings = [];
     let canonicalUsages = 0;
     for (const file of p.files) {
@@ -4668,7 +4669,7 @@ function analyzePr(p) {
     // from the base versions of the changed files.
     let preexistingIds;
     let adoptionDeltaPct;
-    if (p.readBase) {
+    if (p.readBase && baseAvailable) {
         preexistingIds = new Set();
         let baseCanonical = 0;
         let baseDrift = 0;
@@ -4677,7 +4678,9 @@ function analyzePr(p) {
             if (base == null)
                 continue;
             const res = (0, parser_1.checkDriftFull)(base, p.dsExports, p.canonicalPkgs, p.allowlist, file);
-            const baseFindings = (0, findings_1.flattenFindings)(file, res);
+            // Suppress base findings the same way head findings are (analyze above), so the
+            // adoption delta compares like with like and .polderignore doesn't fake a gain.
+            const baseFindings = (0, suppress_1.applySuppressions)((0, findings_1.flattenFindings)(file, res), p.suppress);
             for (const f of baseFindings)
                 preexistingIds.add(f.id);
             baseDrift += baseFindings.length;
@@ -4696,8 +4699,9 @@ function analyzePr(p) {
         adoptionDeltaPct,
         minSeverityToComment: p.minSeverityToComment,
         marker: p.marker,
+        baseAvailable,
     });
-    return { ...render, totalFindings: findings.length, adoptionPct: adopt };
+    return { ...render, totalFindings: findings.length, adoptionPct: adopt, baseAvailable };
 }
 
 
@@ -4781,6 +4785,34 @@ function renderComment(findings, opts = {}) {
     const marker = opts.marker ?? exports.COMMENT_MARKER;
     const preexisting = opts.preexistingIds ?? new Set();
     const minRank = SEV_RANK[opts.minSeverityToComment ?? 'medium'];
+    const baseAvailable = opts.baseAvailable !== false;
+    // Base unavailable (e.g. shallow checkout): we cannot tell new from pre-existing,
+    // so report ALL drift honestly rather than mislabelling everything as "new", and
+    // do not let the caller fail the build on a count we can't trust.
+    if (!baseAvailable) {
+        const reportable = findings.filter((f) => SEV_RANK[f.severity] >= minRank);
+        const lines = [marker, '## Polder Drift', ''];
+        lines.push('> Base branch not available (shallow checkout), so this run cannot tell which ' +
+            'drift this PR introduced. Showing all drift. Add `fetch-depth: 0` to your ' +
+            'checkout for new-only reporting.', '');
+        if (opts.adoptionPct !== undefined) {
+            lines.push(`**Design system adoption: ${opts.adoptionPct.toFixed(0)}%**`, '');
+        }
+        if (findings.length === 0) {
+            lines.push('No design system drift detected.', '', footer());
+        }
+        else {
+            lines.push(`${findings.length} drift signal${findings.length === 1 ? '' : 's'} detected:`, '');
+            lines.push(...renderTable(findings));
+            lines.push('', footer());
+        }
+        return {
+            body: lines.join('\n'),
+            shouldComment: reportable.length > 0,
+            newFindings: [],
+            existingFindings: findings,
+        };
+    }
     const newFindings = findings.filter((f) => !preexisting.has(f.id));
     const existingFindings = findings.filter((f) => preexisting.has(f.id));
     const hasReportableNew = newFindings.some((f) => SEV_RANK[f.severity] >= minRank);
@@ -4891,6 +4923,7 @@ exports.applySuppressions = applySuppressions;
 const fs = __importStar(__nccwpck_require__(896));
 const path = __importStar(__nccwpck_require__(928));
 const ID_RE = /^[0-9a-f]{12}$/;
+const REGEX_SPECIAL = /[.+^${}()|[\]\\]/;
 function parseSuppressions(content) {
     const ids = new Set();
     const rules = new Set();
@@ -4918,14 +4951,32 @@ function loadSuppressions(cwd) {
         return { ids: new Set(), rules: new Set(), globs: [] };
     }
 }
+/**
+ * Translate a path glob to an anchored RegExp. Single pass, no sentinel:
+ * `**` -> `.*` (crosses directories), `*` -> `[^/]*` (within one segment),
+ * every regex special is escaped.
+ */
 function globToRegExp(glob) {
-    // Escape regex specials, then translate ** -> .* and * -> [^/]*
-    const escaped = glob
-        .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-        .replace(/\*\*/g, ' ')
-        .replace(/\*/g, '[^/]*')
-        .replace(/ /g, '.*');
-    return new RegExp(`^${escaped}$`);
+    let out = '';
+    for (let i = 0; i < glob.length; i++) {
+        const c = glob[i];
+        if (c === '*') {
+            if (glob[i + 1] === '*') {
+                out += '.*';
+                i++; // consume the second star
+            }
+            else {
+                out += '[^/]*';
+            }
+        }
+        else if (REGEX_SPECIAL.test(c)) {
+            out += '\\' + c;
+        }
+        else {
+            out += c;
+        }
+    }
+    return new RegExp(`^${out}$`);
 }
 function isSuppressed(f, s) {
     if (s.ids.has(f.id))
@@ -5005,6 +5056,9 @@ function parseConfig(raw) {
         if (cfg.component_library.length === 0) {
             throw new Error('component_library is required in .polder.yml');
         }
+        if (!cfg.component_library.every((x) => typeof x === 'string')) {
+            throw new Error('component_library entries must all be strings');
+        }
         componentLibrary = cfg.component_library;
     }
     else {
@@ -5012,7 +5066,9 @@ function parseConfig(raw) {
     }
     return {
         componentLibrary,
-        allowlist: Array.isArray(cfg.allowlist) ? cfg.allowlist : [],
+        // Keep only string entries; a non-string allowlist value is ignored rather than
+        // crashing later string operations.
+        allowlist: Array.isArray(cfg.allowlist) ? cfg.allowlist.filter((x) => typeof x === 'string') : [],
         failOnDrift: cfg.fail_on_drift === true,
     };
 }
@@ -5090,11 +5146,20 @@ exports.KNOWN_DS_PACKAGES = [
     'grommet',
 ];
 function detectComponentLibrary(cwd, known = exports.KNOWN_DS_PACKAGES) {
-    let pkg;
+    let raw;
     try {
-        pkg = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'));
+        raw = fs.readFileSync(path.join(cwd, 'package.json'), 'utf8');
     }
     catch {
+        return { libraries: [], source: 'none' }; // no package.json — nothing to detect
+    }
+    let pkg;
+    try {
+        pkg = JSON.parse(raw);
+    }
+    catch {
+        // A present-but-invalid package.json is a different problem from "no DS"; surface it.
+        process.stderr.write(`polder-drift: package.json in ${cwd} is not valid JSON; skipping auto-detection.\n`);
         return { libraries: [], source: 'none' };
     }
     const deps = { ...(pkg.dependencies ?? {}), ...(pkg.peerDependencies ?? {}) };
@@ -5341,6 +5406,10 @@ function countCanonicalUsages(fileContent, dsExports, canonicalPkgs) {
                     : specifier.local.name;
                 if (dsExports.size === 0 || dsExports.has(localName))
                     count++;
+            }
+            else if (specifier.type === 'ImportNamespaceSpecifier') {
+                // `import * as DS from '@acme/ds'` is canonical usage of the package.
+                count++;
             }
         }
     }
@@ -5818,17 +5887,27 @@ class AzdoPlatform {
         return null;
     }
     async api(url, method, body) {
-        const res = await fetch(url, {
-            method,
-            headers: {
-                Authorization: `Bearer ${this.token}`,
-                'Content-Type': 'application/json',
-            },
-            body: body === undefined ? undefined : JSON.stringify(body),
-        });
-        if (!res.ok)
-            throw new Error(`${method} ${res.status} ${res.statusText}`);
-        return res.status === 204 ? null : res.json();
+        // Bound the request so a slow/black-holed Azure DevOps endpoint fails the step
+        // fast instead of hanging until the agent's job timeout.
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15000);
+        try {
+            const res = await fetch(url, {
+                method,
+                headers: {
+                    Authorization: `Bearer ${this.token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: body === undefined ? undefined : JSON.stringify(body),
+                signal: controller.signal,
+            });
+            if (!res.ok)
+                throw new Error(`${method} ${res.status} ${res.statusText}`);
+            return res.status === 204 ? null : res.json();
+        }
+        finally {
+            clearTimeout(timer);
+        }
     }
 }
 exports.AzdoPlatform = AzdoPlatform;
@@ -5859,6 +5938,7 @@ function detectPlatform(env = process.env) {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.baseRefExists = baseRefExists;
 exports.readBaseFile = readBaseFile;
 exports.blameIntroducingCommit = blameIntroducingCommit;
 exports.diffChangedFiles = diffChangedFiles;
@@ -5875,6 +5955,10 @@ function git(cwd, args) {
     catch {
         return null;
     }
+}
+/** True if the base ref resolves to a commit in the local clone. */
+function baseRefExists(cwd, baseRef) {
+    return git(cwd, ['rev-parse', '--verify', '--quiet', `${baseRef}^{commit}`]) !== null;
 }
 /** Base-branch version of a file (for "new in this PR" diffing). */
 function readBaseFile(cwd, baseRef, file) {
@@ -6066,6 +6150,14 @@ async function runCi(platform, opts = {}) {
     const suppress = (0, suppress_1.loadSuppressions)(workspace);
     const baseRef = platform.getBaseRef();
     const files = await platform.getChangedSourceFiles();
+    // Is the base commit actually in the local clone? On a shallow checkout it often
+    // isn't, in which case we cannot distinguish new from pre-existing drift.
+    const baseAvailable = baseRef ? (0, git_1.baseRefExists)(workspace, baseRef) : false;
+    if (baseRef && !baseAvailable) {
+        warn(`Polder Drift: base ref "${baseRef}" is not in the local clone (shallow checkout?). ` +
+            `Cannot tell new from pre-existing drift; reporting all and NOT failing on drift. ` +
+            `Add "fetch-depth: 0" to your checkout step.`);
+    }
     const result = (0, analyze_1.analyzePr)({
         files,
         readCurrent: (file) => {
@@ -6076,20 +6168,26 @@ async function runCi(platform, opts = {}) {
                 return null;
             }
         },
-        readBase: baseRef ? (file) => (0, git_1.readBaseFile)(workspace, baseRef, file) : undefined,
+        readBase: baseAvailable ? (file) => (0, git_1.readBaseFile)(workspace, baseRef, file) : undefined,
         blame: (file) => (0, git_1.blameIntroducingCommit)(workspace, baseRef, file),
+        baseAvailable,
         dsExports,
         canonicalPkgs: config.componentLibrary,
         allowlist: config.allowlist,
         suppress,
     });
-    // Post a new comment only when there is reportable new drift; otherwise update an
+    // Post a new comment only when there is reportable drift; otherwise update an
     // existing comment (to clear a prior alert) but do not create noise on a clean PR.
     await platform.upsertComment(result.body, render_1.COMMENT_MARKER, result.shouldComment);
     const failOnDrift = opts.failOnDriftOverride ?? config.failOnDrift;
-    const failed = failOnDrift && result.newFindings.length > 0;
+    // Only fail on "new" drift when we could actually determine what's new. When the base
+    // is unavailable, failing would punish PRs for pre-existing drift, so we never do.
+    const failed = failOnDrift && result.baseAvailable && result.newFindings.length > 0;
     if (failed) {
         platform.fail(`Polder Drift: ${result.newFindings.length} new drift signal(s) introduced by this PR`);
+    }
+    else if (failOnDrift && !result.baseAvailable && result.totalFindings > 0) {
+        warn('Polder Drift: fail-on-drift skipped because the base ref was unavailable (see above).');
     }
     return {
         status: 'analyzed',

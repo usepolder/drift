@@ -103,15 +103,24 @@ export class AzdoPlatform implements PrPlatform {
   }
 
   private async api(url: string, method: string, body?: unknown): Promise<unknown> {
-    const res = await fetch(url, {
-      method,
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-        'Content-Type': 'application/json',
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error(`${method} ${res.status} ${res.statusText}`);
-    return res.status === 204 ? null : res.json();
+    // Bound the request so a slow/black-holed Azure DevOps endpoint fails the step
+    // fast instead of hanging until the agent's job timeout.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      const res = await fetch(url, {
+        method,
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error(`${method} ${res.status} ${res.statusText}`);
+      return res.status === 204 ? null : res.json();
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
