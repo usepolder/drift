@@ -35,6 +35,12 @@ Rules of thumb:
 - Adding a CI host (e.g. GitLab) is a new `PrPlatform` implementation, not a fork.
 - Avoid new runtime dependencies; favour explicit over clever.
 
+For the full design rationale (why the engine is pure, the engine/core/transport split,
+the anti-noise philosophy, and trade-offs), see
+[docs/explanation-how-detection-works.md](docs/explanation-how-detection-works.md). The
+detection rules themselves are documented in
+[docs/reference-detection-rules.md](docs/reference-detection-rules.md).
+
 ## The committed bundle
 
 The Action and CLI run from the committed `dist/` bundle. After changing anything under
