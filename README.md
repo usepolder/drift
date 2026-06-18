@@ -116,6 +116,32 @@ jobs:
 The Action reads `.polder.yml`, analyses the files touched by the PR, and upserts a
 single drift comment. Run your install step before it so DS exports resolve.
 
+The comment shows design-system **adoption %**, only the drift **introduced by this PR**
+(pre-existing drift is collapsed), each finding's **stable ID** for suppression, and the
+**commit** that introduced it. Suppress noise via a repo-root `.polderignore`:
+
+```
+# .polderignore
+a1b2c3d4e5f6        # one finding, by ID
+rule:token-fingerprint   # a whole rule
+path:src/legacy/**       # a path glob
+```
+
+## Azure DevOps
+
+Same comment, on Azure DevOps PRs, no extension to install. Run the CLI as a pipeline step:
+
+```yaml
+- checkout: self
+  fetchDepth: 0
+- script: npm ci
+- script: npx @usepolder/drift ci
+  env:
+    SYSTEM_ACCESSTOKEN: $(System.AccessToken)
+```
+
+Full setup, permissions, and gating: [docs/azure-pipelines.md](docs/azure-pipelines.md).
+
 ## Development
 
 ```bash

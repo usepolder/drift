@@ -191,6 +191,45 @@ export function checkDrift(
   return { driftCount: driftedSymbols.length, driftedSymbols };
 }
 
+/**
+ * Count "correct" DS usage: import specifiers pulled from a canonical package whose
+ * symbol is a known DS export. Paired with the drift count, this yields an adoption
+ * ratio (canonical / (canonical + drift)). When DS exports could not be resolved,
+ * counts any specifier imported from a canonical package (best effort).
+ */
+export function countCanonicalUsages(
+  fileContent: string,
+  dsExports: Set<string>,
+  canonicalPkgs: string[],
+): number {
+  let ast;
+  try {
+    ast = parse(fileContent, BABEL_OPTIONS);
+  } catch {
+    return 0;
+  }
+
+  let count = 0;
+  for (const node of ast.program.body) {
+    if (node.type !== 'ImportDeclaration') continue;
+    const decl = node as ImportDeclaration;
+    if (!canonicalPkgs.some((pkg) => decl.source.value === pkg)) continue;
+
+    for (const specifier of decl.specifiers) {
+      if (specifier.type === 'ImportSpecifier' || specifier.type === 'ImportDefaultSpecifier') {
+        const localName =
+          specifier.type === 'ImportSpecifier'
+            ? specifier.imported.type === 'Identifier'
+              ? specifier.imported.name
+              : specifier.imported.value
+            : specifier.local.name;
+        if (dsExports.size === 0 || dsExports.has(localName)) count++;
+      }
+    }
+  }
+  return count;
+}
+
 // ── Phase 2: inline drift ─────────────────────────────────────────────────────
 
 // Carbon Design System v11 (White theme) — high-specificity hex tokens.

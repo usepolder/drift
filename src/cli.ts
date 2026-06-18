@@ -43,6 +43,7 @@ Usage:
 
 Commands:
   scan [options] [files...]   Analyse files for design system drift (default work)
+  ci                          Post the drift comment from a CI PR build (Azure DevOps)
   -h, --help                  Show this help
 
 Examples:
@@ -306,10 +307,10 @@ export function formatHuman(report: CliReport): string {
 
 // ── Subcommand dispatch ─────────────────────────────────────────────────────────
 
-// Reserved subcommand names. `mcp`, `telemetry`, and `init` are reserved now so the
-// surface is stable; they are built in later phases. To scan a file literally named
-// like a subcommand, use `polder-drift scan <file>` (scan takes paths explicitly).
-const RESERVED_SUBCOMMANDS = new Set(['scan', 'mcp', 'telemetry', 'init']);
+// Reserved subcommand names. `ci` is built; `mcp`, `telemetry`, and `init` are reserved
+// now so the surface is stable and are built in later phases. To scan a file literally
+// named like a subcommand, use `polder-drift scan <file>` (scan takes paths explicitly).
+const RESERVED_SUBCOMMANDS = new Set(['scan', 'ci', 'mcp', 'telemetry', 'init']);
 
 export function runCli(argv: string[]): number {
   const first = argv[0];
@@ -321,6 +322,13 @@ export function runCli(argv: string[]): number {
 
   if (first === 'scan') {
     return runScan(argv.slice(1));
+  }
+
+  if (first === 'ci') {
+    // `ci` is async (posts a PR comment). The module entrypoint routes it to
+    // runCiSubcommand before reaching here; this guard only fires on direct calls.
+    process.stderr.write("polder-drift: 'ci' runs as the process entrypoint, not via runCli().\n");
+    return 2;
   }
 
   if (first === 'mcp' || first === 'telemetry' || first === 'init') {
@@ -404,5 +412,17 @@ export function runScan(argv: string[]): number {
 
 /* istanbul ignore next */
 if (require.main === module) {
-  process.exit(runCli(process.argv.slice(2)));
+  const argv = process.argv.slice(2);
+  if (argv[0] === 'ci') {
+    // Async command (posts a PR comment); lazy-import to keep `scan` startup light.
+    import('./commands/ci')
+      .then(({ runCiSubcommand }) => runCiSubcommand(argv.slice(1)))
+      .then((code) => process.exit(code))
+      .catch((err: Error) => {
+        process.stderr.write(`polder-drift: ${err.message}\n`);
+        process.exit(2);
+      });
+  } else {
+    process.exit(runCli(argv));
+  }
 }

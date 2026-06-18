@@ -4150,6 +4150,7 @@ Usage:
 
 Commands:
   scan [options] [files...]   Analyse files for design system drift (default work)
+  ci                          Post the drift comment from a CI PR build (Azure DevOps)
   -h, --help                  Show this help
 
 Examples:
@@ -4380,10 +4381,10 @@ function formatHuman(report) {
     return lines.join('\n').trimEnd();
 }
 // ── Subcommand dispatch ─────────────────────────────────────────────────────────
-// Reserved subcommand names. `mcp`, `telemetry`, and `init` are reserved now so the
-// surface is stable; they are built in later phases. To scan a file literally named
-// like a subcommand, use `polder-drift scan <file>` (scan takes paths explicitly).
-const RESERVED_SUBCOMMANDS = new Set(['scan', 'mcp', 'telemetry', 'init']);
+// Reserved subcommand names. `ci` is built; `mcp`, `telemetry`, and `init` are reserved
+// now so the surface is stable and are built in later phases. To scan a file literally
+// named like a subcommand, use `polder-drift scan <file>` (scan takes paths explicitly).
+const RESERVED_SUBCOMMANDS = new Set(['scan', 'ci', 'mcp', 'telemetry', 'init']);
 function runCli(argv) {
     const first = argv[0];
     if (first === undefined || first === '-h' || first === '--help') {
@@ -4392,6 +4393,12 @@ function runCli(argv) {
     }
     if (first === 'scan') {
         return runScan(argv.slice(1));
+    }
+    if (first === 'ci') {
+        // `ci` is async (posts a PR comment). The module entrypoint routes it to
+        // runCiSubcommand before reaching here; this guard only fires on direct calls.
+        process.stderr.write("polder-drift: 'ci' runs as the process entrypoint, not via runCli().\n");
+        return 2;
     }
     if (first === 'mcp' || first === 'telemetry' || first === 'init') {
         process.stderr.write(`polder-drift: '${first}' is not available yet.\n`);
@@ -4463,7 +4470,400 @@ function runScan(argv) {
 }
 /* istanbul ignore next */
 if (require.main === require.cache[eval('__filename')]) {
-    process.exit(runCli(process.argv.slice(2)));
+    const argv = process.argv.slice(2);
+    if (argv[0] === 'ci') {
+        // Async command (posts a PR comment); lazy-import to keep `scan` startup light.
+        Promise.resolve().then(() => __importStar(__nccwpck_require__(59))).then(({ runCiSubcommand }) => runCiSubcommand(argv.slice(1)))
+            .then((code) => process.exit(code))
+            .catch((err) => {
+            process.stderr.write(`polder-drift: ${err.message}\n`);
+            process.exit(2);
+        });
+    }
+    else {
+        process.exit(runCli(argv));
+    }
+}
+
+
+/***/ }),
+
+/***/ 59:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.runCiSubcommand = runCiSubcommand;
+/**
+ * `polder-drift ci` — post the drift comment from inside a CI PR build.
+ * v1 targets Azure DevOps (GitHub uses the Action). Local runs should use `scan`.
+ */
+const detect_1 = __nccwpck_require__(530);
+const azdo_1 = __nccwpck_require__(588);
+const run_ci_1 = __nccwpck_require__(479);
+async function runCiSubcommand(_argv) {
+    const warn = (m) => {
+        process.stderr.write(m + '\n');
+    };
+    const platform = (0, detect_1.detectPlatform)();
+    if (platform === 'github') {
+        warn('polder-drift ci: on GitHub, use the Action (`uses: usepolder/drift@v1`) instead of `ci`.');
+        return 2;
+    }
+    if (platform !== 'azdo') {
+        warn('polder-drift ci: no supported CI detected (expected Azure DevOps). For local checks use `polder-drift scan`.');
+        return 2;
+    }
+    const azdo = azdo_1.AzdoPlatform.fromEnv(process.env, warn);
+    if (!azdo) {
+        warn('polder-drift ci: missing Azure DevOps PR variables (run this in a pull-request build validation).');
+        return 2;
+    }
+    const res = await (0, run_ci_1.runCi)(azdo, { warn });
+    if (res.status === 'no-config')
+        return 0;
+    process.stdout.write(`Polder Drift: ${res.newFindings} new / ${res.totalFindings} total drift signal(s)` +
+        (res.adoptionPct !== undefined ? `, adoption ${res.adoptionPct.toFixed(0)}%` : '') +
+        '\n');
+    return res.failed ? 1 : 0;
+}
+
+
+/***/ }),
+
+/***/ 981:
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.adoptionPct = adoptionPct;
+/**
+ * Adoption ratio: canonical DS usages over total DS-relevant surface
+ * (canonical usages + drift signals). Undefined when there is no DS surface at all,
+ * so we don't show a misleading "100%" for a file that touches no design system.
+ */
+function adoptionPct(canonicalUsages, driftSignals) {
+    const denom = canonicalUsages + driftSignals;
+    if (denom === 0)
+        return undefined;
+    return (canonicalUsages / denom) * 100;
+}
+
+
+/***/ }),
+
+/***/ 701:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.analyzePr = analyzePr;
+/**
+ * Orchestration core: turn a PR's changed files into a rendered comment + verdict.
+ *
+ * Pure-ish: all I/O (reading current/base file versions, git blame) is injected, so
+ * this is fully unit-testable without git or a network. GitHub and Azure DevOps
+ * transports supply the readers and then post `result.body` when `result.shouldComment`.
+ */
+const parser_1 = __nccwpck_require__(196);
+const findings_1 = __nccwpck_require__(363);
+const suppress_1 = __nccwpck_require__(10);
+const render_1 = __nccwpck_require__(665);
+const adoption_1 = __nccwpck_require__(981);
+function analyzePr(p) {
+    let findings = [];
+    let canonicalUsages = 0;
+    for (const file of p.files) {
+        const content = p.readCurrent(file);
+        if (content == null)
+            continue;
+        const res = (0, parser_1.checkDriftFull)(content, p.dsExports, p.canonicalPkgs, p.allowlist, file);
+        findings.push(...(0, findings_1.flattenFindings)(file, res));
+        canonicalUsages += (0, parser_1.countCanonicalUsages)(content, p.dsExports, p.canonicalPkgs);
+    }
+    findings = (0, suppress_1.applySuppressions)(findings, p.suppress);
+    if (p.blame) {
+        const cache = new Map();
+        for (const f of findings) {
+            if (!cache.has(f.file))
+                cache.set(f.file, p.blame(f.file));
+            const c = cache.get(f.file);
+            if (c)
+                f.commit = c;
+        }
+    }
+    // Pre-existing drift (for "new in this PR") + base adoption (for the delta), both
+    // from the base versions of the changed files.
+    let preexistingIds;
+    let adoptionDeltaPct;
+    if (p.readBase) {
+        preexistingIds = new Set();
+        let baseCanonical = 0;
+        let baseDrift = 0;
+        for (const file of p.files) {
+            const base = p.readBase(file);
+            if (base == null)
+                continue;
+            const res = (0, parser_1.checkDriftFull)(base, p.dsExports, p.canonicalPkgs, p.allowlist, file);
+            const baseFindings = (0, findings_1.flattenFindings)(file, res);
+            for (const f of baseFindings)
+                preexistingIds.add(f.id);
+            baseDrift += baseFindings.length;
+            baseCanonical += (0, parser_1.countCanonicalUsages)(base, p.dsExports, p.canonicalPkgs);
+        }
+        const baseAdopt = (0, adoption_1.adoptionPct)(baseCanonical, baseDrift);
+        const headAdopt = (0, adoption_1.adoptionPct)(canonicalUsages, findings.length);
+        if (baseAdopt !== undefined && headAdopt !== undefined) {
+            adoptionDeltaPct = headAdopt - baseAdopt;
+        }
+    }
+    const adopt = (0, adoption_1.adoptionPct)(canonicalUsages, findings.length);
+    const render = (0, render_1.renderComment)(findings, {
+        preexistingIds,
+        adoptionPct: adopt,
+        adoptionDeltaPct,
+        minSeverityToComment: p.minSeverityToComment,
+        marker: p.marker,
+    });
+    return { ...render, totalFindings: findings.length, adoptionPct: adopt };
+}
+
+
+/***/ }),
+
+/***/ 363:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.RULE_LABEL = void 0;
+exports.findingId = findingId;
+exports.flattenFindings = flattenFindings;
+/**
+ * Normalised drift findings shared by every surface (GitHub Action, AzDO, CLI).
+ *
+ * The engine (`parser.ts`) emits drift in five shapes. This flattens them into one
+ * `Finding` type with a STABLE id, which is what makes suppression, dedup, and
+ * "new in this PR" diffing possible across runs and across platforms.
+ *
+ *   FullDriftResult ──► flattenFindings() ──► Finding[]  (each with a stable id)
+ */
+const crypto_1 = __nccwpck_require__(982);
+const SEVERITY = {
+    'import-drift': 'high',
+    'local-shadow': 'high',
+    'token-fingerprint': 'medium',
+    'prop-match': 'medium',
+    subcomponent: 'medium',
+};
+exports.RULE_LABEL = {
+    'import-drift': 'Import drift',
+    'local-shadow': 'Local shadow',
+    'token-fingerprint': 'Token fingerprint',
+    'prop-match': 'Prop match',
+    subcomponent: 'Sub-component',
+};
+/** Deterministic id for a finding. Same (file, rule, key) always yields the same id. */
+function findingId(file, rule, key) {
+    return (0, crypto_1.createHash)('sha1').update(`${file}|${rule}|${key}`).digest('hex').slice(0, 12);
+}
+/** Flatten one file's engine result into stable, normalised findings. */
+function flattenFindings(file, result) {
+    const out = [];
+    const push = (rule, key, title, detail) => {
+        out.push({ id: findingId(file, rule, key), file, rule, key, title, detail, severity: SEVERITY[rule] });
+    };
+    for (const sym of result.importDrift.symbols) {
+        push('import-drift', sym, sym, 'DS component imported from a local path instead of the package');
+    }
+    for (const name of result.inlineDrift.localShadows) {
+        push('local-shadow', name, name, 'Component defined in-file with the same name as a DS export');
+    }
+    for (const fp of result.inlineDrift.tokenFingerprints) {
+        push('token-fingerprint', fp.componentName, fp.componentName, [...fp.tokens, ...fp.classNames].join(', '));
+    }
+    for (const pm of result.inlineDrift.propMatches) {
+        push('prop-match', pm.componentName, `${pm.componentName} ~ ${pm.matchedDs}`, `${Math.round(pm.score * 100)}% prop overlap: ${pm.matchedProps.join(', ')}`);
+    }
+    for (const sm of result.inlineDrift.subComponentMatches) {
+        push('subcomponent', sm.componentName, `${sm.componentName} ~ ${sm.matchedDs}`, `${sm.confidence}: uses ${sm.subComponentsUsed.join(', ')}`);
+    }
+    return out;
+}
+
+
+/***/ }),
+
+/***/ 665:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.COMMENT_MARKER = void 0;
+exports.renderComment = renderComment;
+const findings_1 = __nccwpck_require__(363);
+exports.COMMENT_MARKER = '<!-- polder-drift-comment -->';
+const SEV_RANK = { high: 2, medium: 1 };
+const RULE_ORDER = ['import-drift', 'local-shadow', 'token-fingerprint', 'prop-match', 'subcomponent'];
+function renderComment(findings, opts = {}) {
+    const marker = opts.marker ?? exports.COMMENT_MARKER;
+    const preexisting = opts.preexistingIds ?? new Set();
+    const minRank = SEV_RANK[opts.minSeverityToComment ?? 'medium'];
+    const newFindings = findings.filter((f) => !preexisting.has(f.id));
+    const existingFindings = findings.filter((f) => preexisting.has(f.id));
+    const hasReportableNew = newFindings.some((f) => SEV_RANK[f.severity] >= minRank);
+    const shouldComment = hasReportableNew;
+    const lines = [marker, '## Polder Drift', ''];
+    // Headline: adoption if we have it, else a signal count.
+    if (opts.adoptionPct !== undefined) {
+        const delta = opts.adoptionDeltaPct === undefined
+            ? ''
+            : ` (${opts.adoptionDeltaPct >= 0 ? '+' : ''}${opts.adoptionDeltaPct.toFixed(1)} pts in this PR)`;
+        lines.push(`**Design system adoption: ${opts.adoptionPct.toFixed(0)}%**${delta}`, '');
+    }
+    if (newFindings.length === 0) {
+        lines.push('No new design system drift introduced by this PR.');
+        if (existingFindings.length > 0) {
+            lines.push('', renderExistingSummary(existingFindings));
+        }
+        lines.push('', footer());
+        return { body: lines.join('\n'), shouldComment, newFindings, existingFindings };
+    }
+    lines.push(`${newFindings.length} new drift signal${newFindings.length === 1 ? '' : 's'} introduced by this PR:`, '');
+    lines.push(...renderTable(newFindings));
+    if (existingFindings.length > 0) {
+        lines.push('', renderExistingSummary(existingFindings));
+    }
+    lines.push('', footer());
+    return { body: lines.join('\n'), shouldComment, newFindings, existingFindings };
+}
+function renderTable(findings) {
+    const sorted = [...findings].sort((a, b) => RULE_ORDER.indexOf(a.rule) - RULE_ORDER.indexOf(b.rule) || a.file.localeCompare(b.file));
+    const rows = sorted.map((f) => {
+        const where = f.commit ? `${f.file} \`@${f.commit.slice(0, 7)}\`` : f.file;
+        return `| ${findings_1.RULE_LABEL[f.rule]} | \`${f.title}\` | ${f.detail} | ${where} | \`${f.id}\` |`;
+    });
+    return [
+        '| Type | What | Detail | Where | ID |',
+        '|------|------|--------|-------|----|',
+        ...rows,
+    ];
+}
+function renderExistingSummary(existing) {
+    const byRule = new Map();
+    for (const f of existing)
+        byRule.set(f.rule, (byRule.get(f.rule) ?? 0) + 1);
+    const parts = RULE_ORDER.filter((r) => byRule.has(r)).map((r) => `${byRule.get(r)} ${findings_1.RULE_LABEL[r].toLowerCase()}`);
+    return `<details><summary>${existing.length} pre-existing drift signal(s) (not introduced by this PR)</summary>\n\n${parts.join(', ')}\n</details>`;
+}
+function footer() {
+    return ('Suppress a finding by adding its `ID` to `.polderignore`, or a whole rule with ' +
+        '`rule:<type>`. — [Polder Drift](https://github.com/usepolder/drift)');
+}
+
+
+/***/ }),
+
+/***/ 10:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.parseSuppressions = parseSuppressions;
+exports.loadSuppressions = loadSuppressions;
+exports.isSuppressed = isSuppressed;
+exports.applySuppressions = applySuppressions;
+/**
+ * Suppression: the anti-noise backbone (the #1 uninstall risk is a noisy comment).
+ *
+ * A repo-root `.polderignore` file, one rule per line:
+ *   # comment
+ *   a1b2c3d4e5f6        suppress this exact finding id
+ *   rule:token-fingerprint   suppress an entire rule
+ *   path:src/legacy/**       suppress findings under a path glob
+ *   src/legacy/**            bare line is treated as a path glob too
+ */
+const fs = __importStar(__nccwpck_require__(896));
+const path = __importStar(__nccwpck_require__(928));
+const ID_RE = /^[0-9a-f]{12}$/;
+function parseSuppressions(content) {
+    const ids = new Set();
+    const rules = new Set();
+    const globs = [];
+    for (const raw of content.split('\n')) {
+        const line = raw.trim();
+        if (!line || line.startsWith('#'))
+            continue;
+        if (line.startsWith('rule:'))
+            rules.add(line.slice(5).trim());
+        else if (line.startsWith('path:'))
+            globs.push(globToRegExp(line.slice(5).trim()));
+        else if (ID_RE.test(line))
+            ids.add(line);
+        else
+            globs.push(globToRegExp(line));
+    }
+    return { ids, rules, globs };
+}
+function loadSuppressions(cwd) {
+    try {
+        return parseSuppressions(fs.readFileSync(path.join(cwd, '.polderignore'), 'utf8'));
+    }
+    catch {
+        return { ids: new Set(), rules: new Set(), globs: [] };
+    }
+}
+function globToRegExp(glob) {
+    // Escape regex specials, then translate ** -> .* and * -> [^/]*
+    const escaped = glob
+        .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+        .replace(/\*\*/g, ' ')
+        .replace(/\*/g, '[^/]*')
+        .replace(/ /g, '.*');
+    return new RegExp(`^${escaped}$`);
+}
+function isSuppressed(f, s) {
+    if (s.ids.has(f.id))
+        return true;
+    if (s.rules.has(f.rule))
+        return true;
+    return s.globs.some((g) => g.test(f.file));
+}
+function applySuppressions(findings, s) {
+    return findings.filter((f) => !isSuppressed(f, s));
 }
 
 
@@ -4595,6 +4995,7 @@ exports.DS_PROP_SIGNATURES = exports.DS_NAME_SEGMENTS = exports.DS_SUBCOMPONENT_
 exports.resolveExports = resolveExports;
 exports.isComponentFile = isComponentFile;
 exports.checkDrift = checkDrift;
+exports.countCanonicalUsages = countCanonicalUsages;
 exports.checkInlineDrift = checkInlineDrift;
 exports.checkDriftFull = checkDriftFull;
 const fs = __importStar(__nccwpck_require__(896));
@@ -4757,6 +5158,41 @@ function checkDrift(fileContent, dsExports, canonicalPkgs, allowlist, filename) 
         }
     }
     return { driftCount: driftedSymbols.length, driftedSymbols };
+}
+/**
+ * Count "correct" DS usage: import specifiers pulled from a canonical package whose
+ * symbol is a known DS export. Paired with the drift count, this yields an adoption
+ * ratio (canonical / (canonical + drift)). When DS exports could not be resolved,
+ * counts any specifier imported from a canonical package (best effort).
+ */
+function countCanonicalUsages(fileContent, dsExports, canonicalPkgs) {
+    let ast;
+    try {
+        ast = (0, parser_1.parse)(fileContent, BABEL_OPTIONS);
+    }
+    catch {
+        return 0;
+    }
+    let count = 0;
+    for (const node of ast.program.body) {
+        if (node.type !== 'ImportDeclaration')
+            continue;
+        const decl = node;
+        if (!canonicalPkgs.some((pkg) => decl.source.value === pkg))
+            continue;
+        for (const specifier of decl.specifiers) {
+            if (specifier.type === 'ImportSpecifier' || specifier.type === 'ImportDefaultSpecifier') {
+                const localName = specifier.type === 'ImportSpecifier'
+                    ? specifier.imported.type === 'Identifier'
+                        ? specifier.imported.name
+                        : specifier.imported.value
+                    : specifier.local.name;
+                if (dsExports.size === 0 || dsExports.has(localName))
+                    count++;
+            }
+        }
+    }
+    return count;
 }
 // ── Phase 2: inline drift ─────────────────────────────────────────────────────
 // Carbon Design System v11 (White theme) — high-specificity hex tokens.
@@ -5143,10 +5579,317 @@ function checkDriftFull(fileContent, dsExports, canonicalPkgs, allowlist, filena
 
 /***/ }),
 
+/***/ 588:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.AzdoPlatform = void 0;
+const git_1 = __nccwpck_require__(160);
+const SOURCE_RE = /\.(ts|tsx|js|jsx)$/;
+const API_VERSION = '7.1-preview.1';
+class AzdoPlatform {
+    threadsUrl;
+    token;
+    baseRef;
+    warn;
+    name = 'azdo';
+    workspace;
+    constructor(threadsUrl, token, baseRef, workspace, warn) {
+        this.threadsUrl = threadsUrl;
+        this.token = token;
+        this.baseRef = baseRef;
+        this.warn = warn;
+        this.workspace = workspace;
+    }
+    static fromEnv(env = process.env, warn = (m) => process.stderr.write(m + '\n')) {
+        const collection = env.SYSTEM_COLLECTIONURI; // e.g. https://dev.azure.com/org/
+        const project = env.SYSTEM_TEAMPROJECT;
+        const repoId = env.BUILD_REPOSITORY_ID ?? env.BUILD_REPOSITORY_NAME;
+        const prId = env.SYSTEM_PULLREQUEST_PULLREQUESTID;
+        const token = env.SYSTEM_ACCESSTOKEN;
+        const workspace = env.BUILD_SOURCESDIRECTORY ?? process.cwd();
+        if (!collection || !project || !repoId || !prId)
+            return null;
+        if (!token) {
+            warn('Polder Drift: SYSTEM_ACCESSTOKEN is empty. Enable "Allow scripts to access the OAuth token" on the job, or grant the build service "Contribute to pull requests". Skipping comment.');
+        }
+        const targetBranch = env.SYSTEM_PULLREQUEST_TARGETBRANCH; // refs/heads/main
+        const baseRef = targetBranch ? `origin/${targetBranch.replace(/^refs\/heads\//, '')}` : null;
+        const base = collection.endsWith('/') ? collection : `${collection}/`;
+        const threadsUrl = `${base}${encodeURIComponent(project)}/_apis/git/repositories/${encodeURIComponent(repoId)}/pullRequests/${prId}/threads`;
+        return new AzdoPlatform(threadsUrl, token ?? '', baseRef, workspace, warn);
+    }
+    getBaseRef() {
+        return this.baseRef;
+    }
+    async getChangedSourceFiles() {
+        if (!this.baseRef)
+            return [];
+        return (0, git_1.diffChangedFiles)(this.workspace, this.baseRef).filter((f) => SOURCE_RE.test(f));
+    }
+    async upsertComment(body, marker, createIfMissing) {
+        if (!this.token)
+            return; // already warned in fromEnv
+        const existing = await this.findExistingComment(marker);
+        try {
+            if (existing) {
+                await this.api(`${this.threadsUrl}/${existing.threadId}/comments/${existing.commentId}?api-version=${API_VERSION}`, 'PATCH', { content: body });
+            }
+            else if (createIfMissing) {
+                await this.api(`${this.threadsUrl}?api-version=${API_VERSION}`, 'POST', {
+                    comments: [{ parentCommentId: 0, content: body, commentType: 'text' }],
+                    status: 'active',
+                });
+            }
+        }
+        catch (err) {
+            this.warn(`Polder Drift: failed to post Azure DevOps comment: ${err.message}`);
+        }
+    }
+    fail(_message) {
+        // No-op: the `ci` command sets the process exit code from the run result, which
+        // fails the pipeline step and (with a required build-validation policy) the PR.
+    }
+    async findExistingComment(marker) {
+        try {
+            const data = (await this.api(`${this.threadsUrl}?api-version=${API_VERSION}`, 'GET'));
+            for (const thread of data.value ?? []) {
+                const first = thread.comments?.[0];
+                if (first?.content?.includes(marker))
+                    return { threadId: thread.id, commentId: first.id };
+            }
+        }
+        catch (err) {
+            this.warn(`Polder Drift: could not list Azure DevOps threads: ${err.message}`);
+        }
+        return null;
+    }
+    async api(url, method, body) {
+        const res = await fetch(url, {
+            method,
+            headers: {
+                Authorization: `Bearer ${this.token}`,
+                'Content-Type': 'application/json',
+            },
+            body: body === undefined ? undefined : JSON.stringify(body),
+        });
+        if (!res.ok)
+            throw new Error(`${method} ${res.status} ${res.statusText}`);
+        return res.status === 204 ? null : res.json();
+    }
+}
+exports.AzdoPlatform = AzdoPlatform;
+
+
+/***/ }),
+
+/***/ 530:
+/***/ ((__unused_webpack_module, exports) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.detectPlatform = detectPlatform;
+function detectPlatform(env = process.env) {
+    if (env.GITHUB_ACTIONS === 'true')
+        return 'github';
+    // Azure DevOps sets TF_BUILD=True and a family of SYSTEM_*/BUILD_* vars.
+    if (env.TF_BUILD || env.SYSTEM_COLLECTIONURI)
+        return 'azdo';
+    return null;
+}
+
+
+/***/ }),
+
+/***/ 160:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
+
+
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.readBaseFile = readBaseFile;
+exports.blameIntroducingCommit = blameIntroducingCommit;
+exports.diffChangedFiles = diffChangedFiles;
+/**
+ * Local git helpers shared by transports (Azure DevOps uses these directly since the
+ * pipeline checks out the repo; GitHub uses them best-effort for base content).
+ * All failures degrade to null/empty so a missing base ref never breaks a run.
+ */
+const child_process_1 = __nccwpck_require__(317);
+function git(cwd, args) {
+    try {
+        return (0, child_process_1.execFileSync)('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    }
+    catch {
+        return null;
+    }
+}
+/** Base-branch version of a file (for "new in this PR" diffing). */
+function readBaseFile(cwd, baseRef, file) {
+    return git(cwd, ['show', `${baseRef}:${file}`]);
+}
+/** Commit that introduced this file's current state within the PR range (best effort). */
+function blameIntroducingCommit(cwd, baseRef, file) {
+    const range = baseRef ? [`${baseRef}..HEAD`] : [];
+    const out = git(cwd, ['log', '-n', '1', '--format=%H', ...range, '--', file])?.trim();
+    if (out)
+        return out;
+    if (baseRef) {
+        const fallback = git(cwd, ['log', '-n', '1', '--format=%H', '--', file])?.trim();
+        if (fallback)
+            return fallback;
+    }
+    return undefined;
+}
+/** Source files changed in this PR vs its base (three-dot = changes since merge-base). */
+function diffChangedFiles(cwd, baseRef) {
+    const out = git(cwd, ['diff', '--name-only', '--diff-filter=d', `${baseRef}...HEAD`]);
+    if (out == null)
+        return [];
+    return out
+        .split('\n')
+        .map((s) => s.trim())
+        .filter(Boolean);
+}
+
+
+/***/ }),
+
+/***/ 479:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.runCi = runCi;
+/**
+ * Shared CI runner: platform-agnostic glue between a transport and the comment core.
+ * The GitHub Action entry and the `polder-drift ci` command (Azure DevOps / local)
+ * both build a transport and call this. Everything here (config, DS exports,
+ * suppression, base/blame readers) is host-independent.
+ */
+const fs = __importStar(__nccwpck_require__(896));
+const path = __importStar(__nccwpck_require__(928));
+const config_1 = __nccwpck_require__(973);
+const parser_1 = __nccwpck_require__(196);
+const analyze_1 = __nccwpck_require__(701);
+const suppress_1 = __nccwpck_require__(10);
+const render_1 = __nccwpck_require__(665);
+const git_1 = __nccwpck_require__(160);
+function loadConfigFromWorkspace(workspace) {
+    try {
+        return (0, config_1.readConfig)(fs.readFileSync(path.join(workspace, '.polder.yml'), 'utf8'));
+    }
+    catch {
+        return null;
+    }
+}
+function resolveDsExports(config, workspace, warn) {
+    const nodeModules = path.join(workspace, 'node_modules');
+    const dsExports = new Set();
+    for (const pkg of config.componentLibrary) {
+        const ex = (0, parser_1.resolveExports)(pkg, nodeModules);
+        if (ex.size === 0) {
+            warn(`Polder Drift: could not resolve exports for "${pkg}" from node_modules; run install before this step. Falling back to PascalCase heuristic.`);
+        }
+        for (const n of ex)
+            dsExports.add(n);
+    }
+    return dsExports;
+}
+async function runCi(platform, opts = {}) {
+    const warn = opts.warn ?? ((m) => process.stderr.write(m + '\n'));
+    const workspace = platform.workspace;
+    const config = loadConfigFromWorkspace(workspace);
+    if (!config) {
+        warn('Polder Drift: no .polder.yml found; nothing to check.');
+        return { status: 'no-config', newFindings: 0, totalFindings: 0, posted: false, failed: false };
+    }
+    const dsExports = resolveDsExports(config, workspace, warn);
+    const suppress = (0, suppress_1.loadSuppressions)(workspace);
+    const baseRef = platform.getBaseRef();
+    const files = await platform.getChangedSourceFiles();
+    const result = (0, analyze_1.analyzePr)({
+        files,
+        readCurrent: (file) => {
+            try {
+                return fs.readFileSync(path.join(workspace, file), 'utf8');
+            }
+            catch {
+                return null;
+            }
+        },
+        readBase: baseRef ? (file) => (0, git_1.readBaseFile)(workspace, baseRef, file) : undefined,
+        blame: (file) => (0, git_1.blameIntroducingCommit)(workspace, baseRef, file),
+        dsExports,
+        canonicalPkgs: config.componentLibrary,
+        allowlist: config.allowlist,
+        suppress,
+    });
+    // Post a new comment only when there is reportable new drift; otherwise update an
+    // existing comment (to clear a prior alert) but do not create noise on a clean PR.
+    await platform.upsertComment(result.body, render_1.COMMENT_MARKER, result.shouldComment);
+    const failOnDrift = opts.failOnDriftOverride ?? config.failOnDrift;
+    const failed = failOnDrift && result.newFindings.length > 0;
+    if (failed) {
+        platform.fail(`Polder Drift: ${result.newFindings.length} new drift signal(s) introduced by this PR`);
+    }
+    return {
+        status: 'analyzed',
+        newFindings: result.newFindings.length,
+        totalFindings: result.totalFindings,
+        adoptionPct: result.adoptionPct,
+        posted: result.shouldComment,
+        failed,
+    };
+}
+
+
+/***/ }),
+
 /***/ 317:
 /***/ ((module) => {
 
 module.exports = require("child_process");
+
+/***/ }),
+
+/***/ 982:
+/***/ ((module) => {
+
+module.exports = require("crypto");
 
 /***/ }),
 
