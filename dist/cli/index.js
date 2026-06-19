@@ -3,14 +3,14 @@
 /******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ({
 
-/***/ 281:
+/***/ 209:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
 
-var loader = __nccwpck_require__(950);
-var dumper = __nccwpck_require__(980);
+var loader = __nccwpck_require__(718);
+var dumper = __nccwpck_require__(396);
 
 
 function renamed(from, to) {
@@ -21,32 +21,32 @@ function renamed(from, to) {
 }
 
 
-module.exports.Type = __nccwpck_require__(557);
-module.exports.Schema = __nccwpck_require__(46);
-module.exports.FAILSAFE_SCHEMA = __nccwpck_require__(832);
-module.exports.JSON_SCHEMA = __nccwpck_require__(927);
-module.exports.CORE_SCHEMA = __nccwpck_require__(746);
-module.exports.DEFAULT_SCHEMA = __nccwpck_require__(336);
+module.exports.Type = __nccwpck_require__(565);
+module.exports.Schema = __nccwpck_require__(878);
+module.exports.FAILSAFE_SCHEMA = __nccwpck_require__(344);
+module.exports.JSON_SCHEMA = __nccwpck_require__(383);
+module.exports.CORE_SCHEMA = __nccwpck_require__(378);
+module.exports.DEFAULT_SCHEMA = __nccwpck_require__(440);
 module.exports.load                = loader.load;
 module.exports.loadAll             = loader.loadAll;
 module.exports.dump                = dumper.dump;
-module.exports.YAMLException = __nccwpck_require__(248);
+module.exports.YAMLException = __nccwpck_require__(264);
 
 // Re-export all types in case user wants to create custom schema
 module.exports.types = {
-  binary:    __nccwpck_require__(149),
-  float:     __nccwpck_require__(584),
-  map:       __nccwpck_require__(316),
-  null:      __nccwpck_require__(333),
-  pairs:     __nccwpck_require__(267),
-  set:       __nccwpck_require__(758),
-  timestamp: __nccwpck_require__(966),
-  bool:      __nccwpck_require__(296),
-  int:       __nccwpck_require__(271),
-  merge:     __nccwpck_require__(854),
-  omap:      __nccwpck_require__(649),
-  seq:       __nccwpck_require__(161),
-  str:       __nccwpck_require__(929)
+  binary:    __nccwpck_require__(813),
+  float:     __nccwpck_require__(360),
+  map:       __nccwpck_require__(276),
+  null:      __nccwpck_require__(229),
+  pairs:     __nccwpck_require__(387),
+  set:       __nccwpck_require__(430),
+  timestamp: __nccwpck_require__(446),
+  bool:      __nccwpck_require__(480),
+  int:       __nccwpck_require__(295),
+  merge:     __nccwpck_require__(206),
+  omap:      __nccwpck_require__(657),
+  seq:       __nccwpck_require__(289),
+  str:       __nccwpck_require__(769)
 };
 
 // Removed functions from JS-YAML 3.0.x
@@ -57,7 +57,7 @@ module.exports.safeDump            = renamed('safeDump', 'dump');
 
 /***/ }),
 
-/***/ 816:
+/***/ 216:
 /***/ ((module) => {
 
 
@@ -123,16 +123,16 @@ module.exports.extend         = extend;
 
 /***/ }),
 
-/***/ 980:
+/***/ 396:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
 /*eslint-disable no-use-before-define*/
 
-var common              = __nccwpck_require__(816);
-var YAMLException       = __nccwpck_require__(248);
-var DEFAULT_SCHEMA      = __nccwpck_require__(336);
+var common              = __nccwpck_require__(216);
+var YAMLException       = __nccwpck_require__(264);
+var DEFAULT_SCHEMA      = __nccwpck_require__(440);
 
 var _toString       = Object.prototype.toString;
 var _hasOwnProperty = Object.prototype.hasOwnProperty;
@@ -1095,7 +1095,7 @@ module.exports.dump = dump;
 
 /***/ }),
 
-/***/ 248:
+/***/ 264:
 /***/ ((module) => {
 
 // YAML error class. http://stackoverflow.com/questions/8458984
@@ -1157,17 +1157,17 @@ module.exports = YAMLException;
 
 /***/ }),
 
-/***/ 950:
+/***/ 718:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
 /*eslint-disable max-len,no-use-before-define*/
 
-var common              = __nccwpck_require__(816);
-var YAMLException       = __nccwpck_require__(248);
-var makeSnippet         = __nccwpck_require__(440);
-var DEFAULT_SCHEMA      = __nccwpck_require__(336);
+var common              = __nccwpck_require__(216);
+var YAMLException       = __nccwpck_require__(264);
+var makeSnippet         = __nccwpck_require__(856);
+var DEFAULT_SCHEMA      = __nccwpck_require__(440);
 
 
 var _hasOwnProperty = Object.prototype.hasOwnProperty;
@@ -2897,15 +2897,15 @@ module.exports.load    = load;
 
 /***/ }),
 
-/***/ 46:
+/***/ 878:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
 /*eslint-disable max-len*/
 
-var YAMLException = __nccwpck_require__(248);
-var Type          = __nccwpck_require__(557);
+var YAMLException = __nccwpck_require__(264);
+var Type          = __nccwpck_require__(565);
 
 
 function compileList(schema, name) {
@@ -3025,7 +3025,7 @@ module.exports = Schema;
 
 /***/ }),
 
-/***/ 746:
+/***/ 378:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 // Standard YAML's Core schema.
@@ -3038,12 +3038,12 @@ module.exports = Schema;
 
 
 
-module.exports = __nccwpck_require__(927);
+module.exports = __nccwpck_require__(383);
 
 
 /***/ }),
 
-/***/ 336:
+/***/ 440:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 // JS-YAML's default schema for `safeLoad` function.
@@ -3056,23 +3056,23 @@ module.exports = __nccwpck_require__(927);
 
 
 
-module.exports = (__nccwpck_require__(746).extend)({
+module.exports = (__nccwpck_require__(378).extend)({
   implicit: [
-    __nccwpck_require__(966),
-    __nccwpck_require__(854)
+    __nccwpck_require__(446),
+    __nccwpck_require__(206)
   ],
   explicit: [
-    __nccwpck_require__(149),
-    __nccwpck_require__(649),
-    __nccwpck_require__(267),
-    __nccwpck_require__(758)
+    __nccwpck_require__(813),
+    __nccwpck_require__(657),
+    __nccwpck_require__(387),
+    __nccwpck_require__(430)
   ]
 });
 
 
 /***/ }),
 
-/***/ 832:
+/***/ 344:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 // Standard YAML's Failsafe schema.
@@ -3082,21 +3082,21 @@ module.exports = (__nccwpck_require__(746).extend)({
 
 
 
-var Schema = __nccwpck_require__(46);
+var Schema = __nccwpck_require__(878);
 
 
 module.exports = new Schema({
   explicit: [
-    __nccwpck_require__(929),
-    __nccwpck_require__(161),
-    __nccwpck_require__(316)
+    __nccwpck_require__(769),
+    __nccwpck_require__(289),
+    __nccwpck_require__(276)
   ]
 });
 
 
 /***/ }),
 
-/***/ 927:
+/***/ 383:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 // Standard YAML's JSON schema.
@@ -3110,25 +3110,25 @@ module.exports = new Schema({
 
 
 
-module.exports = (__nccwpck_require__(832).extend)({
+module.exports = (__nccwpck_require__(344).extend)({
   implicit: [
-    __nccwpck_require__(333),
-    __nccwpck_require__(296),
-    __nccwpck_require__(271),
-    __nccwpck_require__(584)
+    __nccwpck_require__(229),
+    __nccwpck_require__(480),
+    __nccwpck_require__(295),
+    __nccwpck_require__(360)
   ]
 });
 
 
 /***/ }),
 
-/***/ 440:
+/***/ 856:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
 
-var common = __nccwpck_require__(816);
+var common = __nccwpck_require__(216);
 
 
 // get snippet for a single line, respecting maxLength
@@ -3230,12 +3230,12 @@ module.exports = makeSnippet;
 
 /***/ }),
 
-/***/ 557:
+/***/ 565:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var YAMLException = __nccwpck_require__(248);
+var YAMLException = __nccwpck_require__(264);
 
 var TYPE_CONSTRUCTOR_OPTIONS = [
   'kind',
@@ -3303,7 +3303,7 @@ module.exports = Type;
 
 /***/ }),
 
-/***/ 149:
+/***/ 813:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
@@ -3311,7 +3311,7 @@ module.exports = Type;
 /*eslint-disable no-bitwise*/
 
 
-var Type = __nccwpck_require__(557);
+var Type = __nccwpck_require__(565);
 
 
 // [ 64, 65, 66 ] -> [ padding, CR, LF ]
@@ -3435,12 +3435,12 @@ module.exports = new Type('tag:yaml.org,2002:binary', {
 
 /***/ }),
 
-/***/ 296:
+/***/ 480:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var Type = __nccwpck_require__(557);
+var Type = __nccwpck_require__(565);
 
 function resolveYamlBoolean(data) {
   if (data === null) return false;
@@ -3477,13 +3477,13 @@ module.exports = new Type('tag:yaml.org,2002:bool', {
 
 /***/ }),
 
-/***/ 584:
+/***/ 360:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var common = __nccwpck_require__(816);
-var Type   = __nccwpck_require__(557);
+var common = __nccwpck_require__(216);
+var Type   = __nccwpck_require__(565);
 
 var YAML_FLOAT_PATTERN = new RegExp(
   // 2.5e4, 2.5 and integers
@@ -3581,13 +3581,13 @@ module.exports = new Type('tag:yaml.org,2002:float', {
 
 /***/ }),
 
-/***/ 271:
+/***/ 295:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var common = __nccwpck_require__(816);
-var Type   = __nccwpck_require__(557);
+var common = __nccwpck_require__(216);
+var Type   = __nccwpck_require__(565);
 
 function isHexCode(c) {
   return ((0x30/* 0 */ <= c) && (c <= 0x39/* 9 */)) ||
@@ -3744,12 +3744,12 @@ module.exports = new Type('tag:yaml.org,2002:int', {
 
 /***/ }),
 
-/***/ 316:
+/***/ 276:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var Type = __nccwpck_require__(557);
+var Type = __nccwpck_require__(565);
 
 module.exports = new Type('tag:yaml.org,2002:map', {
   kind: 'mapping',
@@ -3759,12 +3759,12 @@ module.exports = new Type('tag:yaml.org,2002:map', {
 
 /***/ }),
 
-/***/ 854:
+/***/ 206:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var Type = __nccwpck_require__(557);
+var Type = __nccwpck_require__(565);
 
 function resolveYamlMerge(data) {
   return data === '<<' || data === null;
@@ -3778,12 +3778,12 @@ module.exports = new Type('tag:yaml.org,2002:merge', {
 
 /***/ }),
 
-/***/ 333:
+/***/ 229:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var Type = __nccwpck_require__(557);
+var Type = __nccwpck_require__(565);
 
 function resolveYamlNull(data) {
   if (data === null) return true;
@@ -3820,12 +3820,12 @@ module.exports = new Type('tag:yaml.org,2002:null', {
 
 /***/ }),
 
-/***/ 649:
+/***/ 657:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var Type = __nccwpck_require__(557);
+var Type = __nccwpck_require__(565);
 
 var _hasOwnProperty = Object.prototype.hasOwnProperty;
 var _toString       = Object.prototype.toString;
@@ -3871,12 +3871,12 @@ module.exports = new Type('tag:yaml.org,2002:omap', {
 
 /***/ }),
 
-/***/ 267:
+/***/ 387:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var Type = __nccwpck_require__(557);
+var Type = __nccwpck_require__(565);
 
 var _toString = Object.prototype.toString;
 
@@ -3931,12 +3931,12 @@ module.exports = new Type('tag:yaml.org,2002:pairs', {
 
 /***/ }),
 
-/***/ 161:
+/***/ 289:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var Type = __nccwpck_require__(557);
+var Type = __nccwpck_require__(565);
 
 module.exports = new Type('tag:yaml.org,2002:seq', {
   kind: 'sequence',
@@ -3946,12 +3946,12 @@ module.exports = new Type('tag:yaml.org,2002:seq', {
 
 /***/ }),
 
-/***/ 758:
+/***/ 430:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var Type = __nccwpck_require__(557);
+var Type = __nccwpck_require__(565);
 
 var _hasOwnProperty = Object.prototype.hasOwnProperty;
 
@@ -3982,12 +3982,12 @@ module.exports = new Type('tag:yaml.org,2002:set', {
 
 /***/ }),
 
-/***/ 929:
+/***/ 769:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var Type = __nccwpck_require__(557);
+var Type = __nccwpck_require__(565);
 
 module.exports = new Type('tag:yaml.org,2002:str', {
   kind: 'scalar',
@@ -3997,12 +3997,12 @@ module.exports = new Type('tag:yaml.org,2002:str', {
 
 /***/ }),
 
-/***/ 966:
+/***/ 446:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var Type = __nccwpck_require__(557);
+var Type = __nccwpck_require__(565);
 
 var YAML_DATE_REGEXP = new RegExp(
   '^([0-9][0-9][0-9][0-9])'          + // [1] year
@@ -4092,7 +4092,7 @@ module.exports = new Type('tag:yaml.org,2002:timestamp', {
 
 /***/ }),
 
-/***/ 581:
+/***/ 72:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -4140,9 +4140,9 @@ exports.runScan = runScan;
 const fs = __importStar(__nccwpck_require__(896));
 const path = __importStar(__nccwpck_require__(928));
 const child_process_1 = __nccwpck_require__(317);
-const resolve_config_1 = __nccwpck_require__(190);
-const parser_1 = __nccwpck_require__(196);
-const init_1 = __nccwpck_require__(722);
+const resolve_config_1 = __nccwpck_require__(653);
+const parser_1 = __nccwpck_require__(459);
+const init_1 = __nccwpck_require__(663);
 const SOURCE_RE = /\.(ts|tsx|js|jsx)$/;
 const TOP_HELP = `polder-drift — design system drift detection
 
@@ -4475,7 +4475,7 @@ if (require.main === require.cache[eval('__filename')]) {
     const argv = process.argv.slice(2);
     if (argv[0] === 'ci') {
         // Async command (posts a PR comment); lazy-import to keep `scan` startup light.
-        Promise.resolve().then(() => __importStar(__nccwpck_require__(59))).then(({ runCiSubcommand }) => runCiSubcommand(argv.slice(1)))
+        Promise.resolve().then(() => __importStar(__nccwpck_require__(189))).then(({ runCiSubcommand }) => runCiSubcommand(argv.slice(1)))
             .then((code) => process.exit(code))
             .catch((err) => {
             process.stderr.write(`polder-drift: ${err.message}\n`);
@@ -4490,7 +4490,7 @@ if (require.main === require.cache[eval('__filename')]) {
 
 /***/ }),
 
-/***/ 59:
+/***/ 189:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 
@@ -4500,9 +4500,9 @@ exports.runCiSubcommand = runCiSubcommand;
  * `polder-drift ci` — post the drift comment from inside a CI PR build.
  * v1 targets Azure DevOps (GitHub uses the Action). Local runs should use `scan`.
  */
-const detect_1 = __nccwpck_require__(530);
-const azdo_1 = __nccwpck_require__(588);
-const run_ci_1 = __nccwpck_require__(479);
+const detect_1 = __nccwpck_require__(682);
+const azdo_1 = __nccwpck_require__(499);
+const run_ci_1 = __nccwpck_require__(288);
 async function runCiSubcommand(_argv) {
     const warn = (m) => {
         process.stderr.write(m + '\n');
@@ -4533,7 +4533,7 @@ async function runCiSubcommand(_argv) {
 
 /***/ }),
 
-/***/ 722:
+/***/ 663:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -4577,7 +4577,7 @@ exports.runInitSubcommand = runInitSubcommand;
  */
 const fs = __importStar(__nccwpck_require__(896));
 const path = __importStar(__nccwpck_require__(928));
-const detect_1 = __nccwpck_require__(52);
+const detect_1 = __nccwpck_require__(275);
 function runInitSubcommand(_argv, cwd = process.cwd()) {
     const target = path.join(cwd, '.polder.yml');
     if (fs.existsSync(target)) {
@@ -4603,7 +4603,7 @@ function runInitSubcommand(_argv, cwd = process.cwd()) {
 
 /***/ }),
 
-/***/ 981:
+/***/ 466:
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -4624,7 +4624,7 @@ function adoptionPct(canonicalUsages, driftSignals) {
 
 /***/ }),
 
-/***/ 701:
+/***/ 564:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 
@@ -4637,11 +4637,11 @@ exports.analyzePr = analyzePr;
  * this is fully unit-testable without git or a network. GitHub and Azure DevOps
  * transports supply the readers and then post `result.body` when `result.shouldComment`.
  */
-const parser_1 = __nccwpck_require__(196);
-const findings_1 = __nccwpck_require__(363);
-const suppress_1 = __nccwpck_require__(10);
-const render_1 = __nccwpck_require__(665);
-const adoption_1 = __nccwpck_require__(981);
+const parser_1 = __nccwpck_require__(459);
+const findings_1 = __nccwpck_require__(963);
+const suppress_1 = __nccwpck_require__(509);
+const render_1 = __nccwpck_require__(70);
+const adoption_1 = __nccwpck_require__(466);
 function analyzePr(p) {
     let findings = [];
     let canonicalUsages = 0;
@@ -4703,7 +4703,7 @@ function analyzePr(p) {
 
 /***/ }),
 
-/***/ 363:
+/***/ 963:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 
@@ -4766,14 +4766,14 @@ function flattenFindings(file, result) {
 
 /***/ }),
 
-/***/ 665:
+/***/ 70:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.COMMENT_MARKER = void 0;
 exports.renderComment = renderComment;
-const findings_1 = __nccwpck_require__(363);
+const findings_1 = __nccwpck_require__(963);
 exports.COMMENT_MARKER = '<!-- polder-drift-comment -->';
 const SEV_RANK = { high: 2, medium: 1 };
 const RULE_ORDER = ['import-drift', 'local-shadow', 'token-fingerprint', 'prop-match', 'subcomponent'];
@@ -4836,7 +4836,7 @@ function footer() {
 
 /***/ }),
 
-/***/ 10:
+/***/ 509:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -4918,14 +4918,33 @@ function loadSuppressions(cwd) {
         return { ids: new Set(), rules: new Set(), globs: [] };
     }
 }
+// Sentinels for tokenising the glob before escaping regex specials. Control
+// chars can't appear in a path glob and survive the escape pass untouched, so
+// each `*`/`**` variant is translated exactly once with no collisions.
+const TOK_DOUBLESTAR_SLASH = '\x00'; // leading or embedded `**/`
+const TOK_SLASH_DOUBLESTAR = '\x01'; // trailing `/**`
+const TOK_DOUBLESTAR = '\x02'; // bare `**`
+const TOK_STAR = '\x03'; // single `*`
 function globToRegExp(glob) {
-    // Escape regex specials, then translate ** -> .* and * -> [^/]*
-    const escaped = glob
+    // Translate a gitignore-style path glob into an anchored RegExp.
+    //   `**/`  (leading or embedded) -> zero or more path segments, so
+    //          `**/Button.tsx` matches `Button.tsx` AND `a/b/Button.tsx`.
+    //   `/**`  (trailing)            -> the directory itself plus everything
+    //          under it, so `src/**` matches `src` AND `src/a.tsx`.
+    //   `**`   (bare)                -> any run of characters across `/`.
+    //   `*`                          -> any run of characters within one segment.
+    const tokenised = glob
+        .replace(/\/\*\*$/g, TOK_SLASH_DOUBLESTAR)
+        .replace(/(^|\/)\*\*\//g, (_m, lead) => lead + TOK_DOUBLESTAR_SLASH)
+        .replace(/\*\*/g, TOK_DOUBLESTAR)
+        .replace(/\*/g, TOK_STAR);
+    const body = tokenised
         .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-        .replace(/\*\*/g, ' ')
-        .replace(/\*/g, '[^/]*')
-        .replace(/ /g, '.*');
-    return new RegExp(`^${escaped}$`);
+        .replace(new RegExp(TOK_DOUBLESTAR_SLASH, 'g'), '(?:.*/)?')
+        .replace(new RegExp(TOK_SLASH_DOUBLESTAR, 'g'), '(?:/.*)?')
+        .replace(new RegExp(TOK_DOUBLESTAR, 'g'), '.*')
+        .replace(new RegExp(TOK_STAR, 'g'), '[^/]*');
+    return new RegExp(`^${body}$`);
 }
 function isSuppressed(f, s) {
     if (s.ids.has(f.id))
@@ -4941,7 +4960,7 @@ function applySuppressions(findings, s) {
 
 /***/ }),
 
-/***/ 973:
+/***/ 750:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -4981,7 +5000,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.parseConfig = parseConfig;
 exports.readConfig = readConfig;
-const yaml = __importStar(__nccwpck_require__(281));
+const yaml = __importStar(__nccwpck_require__(209));
 function parseConfig(raw) {
     let parsed;
     try {
@@ -5025,7 +5044,7 @@ function readConfig(content) {
 
 /***/ }),
 
-/***/ 52:
+/***/ 275:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -5105,7 +5124,7 @@ function detectComponentLibrary(cwd, known = exports.KNOWN_DS_PACKAGES) {
 
 /***/ }),
 
-/***/ 196:
+/***/ 459:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -5152,7 +5171,7 @@ exports.checkInlineDrift = checkInlineDrift;
 exports.checkDriftFull = checkDriftFull;
 const fs = __importStar(__nccwpck_require__(896));
 const path = __importStar(__nccwpck_require__(928));
-const parser_1 = __nccwpck_require__(429);
+const parser_1 = __nccwpck_require__(437);
 const BABEL_OPTIONS = {
     plugins: ['typescript', 'jsx'],
     sourceType: 'module',
@@ -5731,13 +5750,13 @@ function checkDriftFull(fileContent, dsExports, canonicalPkgs, allowlist, filena
 
 /***/ }),
 
-/***/ 588:
+/***/ 499:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.AzdoPlatform = void 0;
-const git_1 = __nccwpck_require__(160);
+const git_1 = __nccwpck_require__(909);
 const SOURCE_RE = /\.(ts|tsx|js|jsx)$/;
 const API_VERSION = '7.1-preview.1';
 class AzdoPlatform {
@@ -5836,7 +5855,7 @@ exports.AzdoPlatform = AzdoPlatform;
 
 /***/ }),
 
-/***/ 530:
+/***/ 682:
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -5854,7 +5873,7 @@ function detectPlatform(env = process.env) {
 
 /***/ }),
 
-/***/ 160:
+/***/ 909:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 
@@ -5907,7 +5926,7 @@ function diffChangedFiles(cwd, baseRef) {
 
 /***/ }),
 
-/***/ 190:
+/***/ 653:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -5953,8 +5972,8 @@ exports.resolveConfig = resolveConfig;
  *   3. Otherwise null (caller shows guidance).
  */
 const fs = __importStar(__nccwpck_require__(896));
-const config_1 = __nccwpck_require__(973);
-const detect_1 = __nccwpck_require__(52);
+const config_1 = __nccwpck_require__(750);
+const detect_1 = __nccwpck_require__(275);
 function resolveConfig(cwd, configPath) {
     let content = null;
     try {
@@ -5977,7 +5996,7 @@ function resolveConfig(cwd, configPath) {
 
 /***/ }),
 
-/***/ 479:
+/***/ 288:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -6024,12 +6043,12 @@ exports.runCi = runCi;
  */
 const fs = __importStar(__nccwpck_require__(896));
 const path = __importStar(__nccwpck_require__(928));
-const resolve_config_1 = __nccwpck_require__(190);
-const parser_1 = __nccwpck_require__(196);
-const analyze_1 = __nccwpck_require__(701);
-const suppress_1 = __nccwpck_require__(10);
-const render_1 = __nccwpck_require__(665);
-const git_1 = __nccwpck_require__(160);
+const resolve_config_1 = __nccwpck_require__(653);
+const parser_1 = __nccwpck_require__(459);
+const analyze_1 = __nccwpck_require__(564);
+const suppress_1 = __nccwpck_require__(509);
+const render_1 = __nccwpck_require__(70);
+const git_1 = __nccwpck_require__(909);
 function resolveDsExports(config, workspace, warn) {
     const nodeModules = path.join(workspace, 'node_modules');
     const dsExports = new Set();
@@ -6132,7 +6151,7 @@ module.exports = require("path");
 
 /***/ }),
 
-/***/ 429:
+/***/ 437:
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -20780,7 +20799,7 @@ exports.tokTypes = tokTypes;
 /******/ 	// startup
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __nccwpck_require__(581);
+/******/ 	var __webpack_exports__ = __nccwpck_require__(72);
 /******/ 	module.exports = __webpack_exports__;
 /******/ 	
 /******/ })()
