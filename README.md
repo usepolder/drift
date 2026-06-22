@@ -123,6 +123,9 @@ on: pull_request
 jobs:
   drift:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write   # the Action upserts a PR comment; default GITHUB_TOKEN is read-only
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -133,6 +136,11 @@ jobs:
 
 The Action reads `.polder.yml`, analyses the files touched by the PR, and upserts a
 single drift comment. Run your install step before it so DS exports resolve.
+
+> **Permissions.** The Action posts the comment with the workflow's `GITHUB_TOKEN`,
+> which is **read-only by default** (and always read-only on PRs from forks). Without
+> `pull-requests: write` the comment is silently skipped (or the run fails when
+> `fail_on_drift` is on). The `permissions:` block above grants exactly what it needs.
 
 The comment shows design-system **adoption %**, only the drift **introduced by this PR**
 (pre-existing drift is collapsed), each finding's **stable ID** for suppression, and the

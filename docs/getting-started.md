@@ -181,6 +181,9 @@ on: pull_request
 jobs:
   drift:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write   # required: the Action posts a PR comment
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -188,6 +191,9 @@ jobs:
       - run: npm ci
       - uses: usepolder/drift@v1
 ```
+
+The `pull-requests: write` line matters: the default `GITHUB_TOKEN` is read-only, so
+without it the comment never appears. (Fork PRs are always read-only regardless.)
 
 On Azure DevOps, run `polder-drift ci` as a pipeline step — same comment, no extension.
 See [Polder Drift on Azure DevOps](azure-pipelines.md).

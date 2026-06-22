@@ -106,9 +106,17 @@ export async function runCi(
     posted = await platform.upsertComment(result.body, COMMENT_MARKER, result.shouldComment);
   } catch (err) {
     postError = (err as Error).message;
+    // A 403 (GitHub: "Resource not accessible by integration"; AzDO: lacks
+    // "Contribute to pull requests") almost always means the build identity can't
+    // write PR comments. Point at the fix so a red/empty run is self-service.
+    const status = (err as { status?: number }).status;
+    const permissionHint =
+      status === 403 || /not accessible by integration|contribute to pull requests/i.test(postError)
+        ? ' — the build identity cannot write PR comments. On GitHub, add "permissions: pull-requests: write" to the workflow (the default GITHUB_TOKEN is read-only, and fork PRs always are). On Azure DevOps, grant the build service "Contribute to pull requests".'
+        : '';
     // Surface loudly — otherwise a fail-on-drift run goes red with no comment on the
     // PR explaining why (e.g. the build identity lacks "Contribute to pull requests").
-    warn(`Polder Drift: failed to post the drift comment — it is NOT on the PR: ${postError}`);
+    warn(`Polder Drift: failed to post the drift comment — it is NOT on the PR: ${postError}${permissionHint}`);
   }
 
   const failOnDrift = opts.failOnDriftOverride ?? config.failOnDrift;
