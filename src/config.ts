@@ -37,6 +37,9 @@ export function parseConfig(raw: string): PolderConfig {
     if (cfg.component_library.length === 0) {
       throw new Error('component_library is required in .polder.yml');
     }
+    if (!cfg.component_library.every((x) => typeof x === 'string')) {
+      throw new Error('component_library entries must all be strings');
+    }
     componentLibrary = cfg.component_library;
   } else {
     throw new Error('component_library must be a string or array of strings');
@@ -44,7 +47,9 @@ export function parseConfig(raw: string): PolderConfig {
 
   return {
     componentLibrary,
-    allowlist: Array.isArray(cfg.allowlist) ? cfg.allowlist : [],
+    // Keep only string entries; a non-string allowlist value is ignored rather than
+    // crashing later string operations.
+    allowlist: Array.isArray(cfg.allowlist) ? cfg.allowlist.filter((x) => typeof x === 'string') : [],
     failOnDrift: cfg.fail_on_drift === true,
   };
 }

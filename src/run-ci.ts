@@ -12,7 +12,7 @@ import { resolveExports } from './parser';
 import { analyzePr } from './comment/analyze';
 import { loadSuppressions } from './comment/suppress';
 import { COMMENT_MARKER } from './comment/render';
-import { readBaseFile, blameIntroducingCommit } from './platforms/git';
+import { readBaseFile, blameIntroducingCommit, baseRefExists } from './platforms/git';
 import type { PrPlatform } from './platforms/types';
 
 export interface RunCiResult {
@@ -65,6 +65,17 @@ export async function runCi(
   const baseRef = platform.getBaseRef();
   const files = await platform.getChangedSourceFiles();
 
+  // Is the base commit actually in the local clone? On a shallow checkout it often
+  // isn't, in which case we cannot distinguish new from pre-existing drift.
+  const baseAvailable = baseRef ? baseRefExists(workspace, baseRef) : false;
+  if (baseRef && !baseAvailable) {
+    warn(
+      `Polder Drift: base ref "${baseRef}" is not in the local clone (shallow checkout?). ` +
+        `Cannot tell new from pre-existing drift; reporting all and NOT failing on drift. ` +
+        `Add "fetch-depth: 0" to your checkout step.`,
+    );
+  }
+
   const result = analyzePr({
     files,
     readCurrent: (file) => {
@@ -74,24 +85,29 @@ export async function runCi(
         return null;
       }
     },
-    readBase: baseRef ? (file) => readBaseFile(workspace, baseRef, file) : undefined,
+    readBase: baseAvailable ? (file) => readBaseFile(workspace, baseRef!, file) : undefined,
     blame: (file) => blameIntroducingCommit(workspace, baseRef, file),
+    baseAvailable,
     dsExports,
     canonicalPkgs: config.componentLibrary,
     allowlist: config.allowlist,
     suppress,
   });
 
-  // Post a new comment only when there is reportable new drift; otherwise update an
+  // Post a new comment only when there is reportable drift; otherwise update an
   // existing comment (to clear a prior alert) but do not create noise on a clean PR.
   await platform.upsertComment(result.body, COMMENT_MARKER, result.shouldComment);
 
   const failOnDrift = opts.failOnDriftOverride ?? config.failOnDrift;
-  const failed = failOnDrift && result.newFindings.length > 0;
+  // Only fail on "new" drift when we could actually determine what's new. When the base
+  // is unavailable, failing would punish PRs for pre-existing drift, so we never do.
+  const failed = failOnDrift && result.baseAvailable && result.newFindings.length > 0;
   if (failed) {
     platform.fail(
       `Polder Drift: ${result.newFindings.length} new drift signal(s) introduced by this PR`,
     );
+  } else if (failOnDrift && !result.baseAvailable && result.totalFindings > 0) {
+    warn('Polder Drift: fail-on-drift skipped because the base ref was unavailable (see above).');
   }
 
   return {

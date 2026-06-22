@@ -30,10 +30,19 @@ export interface Detection {
 }
 
 export function detectComponentLibrary(cwd: string, known: string[] = KNOWN_DS_PACKAGES): Detection {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(path.join(cwd, 'package.json'), 'utf8');
+  } catch {
+    return { libraries: [], source: 'none' }; // no package.json — nothing to detect
+  }
+
   let pkg: { dependencies?: Record<string, string>; peerDependencies?: Record<string, string> };
   try {
-    pkg = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'));
+    pkg = JSON.parse(raw);
   } catch {
+    // A present-but-invalid package.json is a different problem from "no DS"; surface it.
+    process.stderr.write(`polder-drift: package.json in ${cwd} is not valid JSON; skipping auto-detection.\n`);
     return { libraries: [], source: 'none' };
   }
   const deps = { ...(pkg.dependencies ?? {}), ...(pkg.peerDependencies ?? {}) };

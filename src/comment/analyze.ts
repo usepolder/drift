@@ -17,6 +17,13 @@ export interface AnalyzeParams {
   readCurrent: (file: string) => string | null;
   /** Base-branch content of a file, or null. Omit to treat all findings as "new". */
   readBase?: (file: string) => string | null;
+  /**
+   * Whether the base ref is actually available for diffing. When false (e.g. a
+   * shallow checkout where the base commit isn't fetched), we cannot tell new from
+   * pre-existing drift, so the comment says so and the caller skips fail-on-drift.
+   * Defaults to true.
+   */
+  baseAvailable?: boolean;
   /** Introducing commit for a file's drift (short/long SHA), or undefined. */
   blame?: (file: string) => string | undefined;
   dsExports: Set<string>;
@@ -30,9 +37,11 @@ export interface AnalyzeParams {
 export interface AnalyzeResult extends RenderResult {
   totalFindings: number;
   adoptionPct?: number;
+  baseAvailable: boolean;
 }
 
 export function analyzePr(p: AnalyzeParams): AnalyzeResult {
+  const baseAvailable = p.baseAvailable !== false;
   let findings: Finding[] = [];
   let canonicalUsages = 0;
 
@@ -60,7 +69,7 @@ export function analyzePr(p: AnalyzeParams): AnalyzeResult {
   let preexistingIds: Set<string> | undefined;
   let adoptionDeltaPct: number | undefined;
   const driftedComponents = countDriftedComponents(findings);
-  if (p.readBase) {
+  if (p.readBase && baseAvailable) {
     preexistingIds = new Set<string>();
     let baseCanonical = 0;
     const baseFindings: Finding[] = [];
@@ -68,7 +77,9 @@ export function analyzePr(p: AnalyzeParams): AnalyzeResult {
       const base = p.readBase(file);
       if (base == null) continue;
       const res = checkDriftFull(base, p.dsExports, p.canonicalPkgs, p.allowlist, file);
-      const ff = flattenFindings(file, res);
+      // Suppress base findings the same way head findings are (analyze above), so the
+      // adoption delta compares like with like and .polderignore doesn't fake a gain.
+      const ff = applySuppressions(flattenFindings(file, res), p.suppress);
       for (const f of ff) preexistingIds.add(f.id);
       baseFindings.push(...ff);
       baseCanonical += countCanonicalUsages(base, p.dsExports, p.canonicalPkgs);
@@ -87,7 +98,8 @@ export function analyzePr(p: AnalyzeParams): AnalyzeResult {
     adoptionDeltaPct,
     minSeverityToComment: p.minSeverityToComment,
     marker: p.marker,
+    baseAvailable,
   });
 
-  return { ...render, totalFindings: findings.length, adoptionPct: adopt };
+  return { ...render, totalFindings: findings.length, adoptionPct: adopt, baseAvailable };
 }
