@@ -13,6 +13,11 @@ function git(cwd: string, args: string[]): string | null {
   }
 }
 
+/** True if the base ref resolves to a commit in the local clone. */
+export function baseRefExists(cwd: string, baseRef: string): boolean {
+  return git(cwd, ['rev-parse', '--verify', '--quiet', `${baseRef}^{commit}`]) !== null;
+}
+
 /** Base-branch version of a file (for "new in this PR" diffing). */
 export function readBaseFile(cwd: string, baseRef: string, file: string): string | null {
   return git(cwd, ['show', `${baseRef}:${file}`]);

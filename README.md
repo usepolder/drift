@@ -1,5 +1,8 @@
 # polder-drift
 
+[![CI](https://github.com/usepolder/drift/actions/workflows/ci.yml/badge.svg)](https://github.com/usepolder/drift/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+
 Design system drift detection for TypeScript/JavaScript codebases. It flags components
 that bypass your registered design system: local imports of DS components, in-file
 shadows of DS exports, hardcoded design tokens, and prop/sub-component look-alikes.
@@ -10,6 +13,21 @@ the same engine:
 
 - **GitHub Action** ([`src/index.ts`](src/index.ts)) — posts a drift summary as a PR comment.
 - **CLI** ([`src/cli.ts`](src/cli.ts)) — the same checks locally, human or JSON output.
+
+## Documentation
+
+New here? Start with the tutorial, then dip into reference as needed.
+
+| Doc | Kind | What it covers |
+|-----|------|----------------|
+| [Getting started](docs/getting-started.md) | Tutorial | Install to first finding in three steps, no DS or CI required |
+| [CLI reference](docs/reference-cli.md) | Reference | `scan` / `ci` / `init`, every flag, exit codes, JSON shape |
+| [Configuration](docs/reference-configuration.md) | Reference | `.polder.yml`, `allowlist`, zero-config detection, precedence |
+| [Detection rules](docs/reference-detection-rules.md) | Reference | The five drift signals, severities, and triggers |
+| [How detection works](docs/explanation-how-detection-works.md) | Explanation | Why it's pure/deterministic, the architecture, the anti-noise design |
+| [Suppress findings](docs/howto-suppress-findings.md) | How-to | Silencing a finding, a rule, or a path with `.polderignore` |
+| [Consume programmatically](docs/howto-consume-json.md) | How-to | Using the `--json` report from a script, agent, or pipeline |
+| [Azure DevOps](docs/azure-pipelines.md) | How-to | Running `polder-drift ci` on Azure DevOps pull requests |
 
 ## Configuration
 

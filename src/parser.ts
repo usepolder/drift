@@ -224,6 +224,9 @@ export function countCanonicalUsages(
               : specifier.imported.value
             : specifier.local.name;
         if (dsExports.size === 0 || dsExports.has(localName)) count++;
+      } else if (specifier.type === 'ImportNamespaceSpecifier') {
+        // `import * as DS from '@acme/ds'` is canonical usage of the package.
+        count++;
       }
     }
   }

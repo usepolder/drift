@@ -18,6 +18,12 @@ export interface RenderOptions {
   /** Only post when there is a NEW finding at or above this severity. Default 'medium'. */
   minSeverityToComment?: 'high' | 'medium';
   marker?: string;
+  /**
+   * Whether the base ref was available for "new in this PR" diffing. When false, the
+   * comment cannot distinguish new from pre-existing drift, so it says so and reports
+   * all drift instead of pretending everything is new. Defaults to true.
+   */
+  baseAvailable?: boolean;
 }
 
 export interface RenderResult {
@@ -34,6 +40,38 @@ export function renderComment(findings: Finding[], opts: RenderOptions = {}): Re
   const marker = opts.marker ?? COMMENT_MARKER;
   const preexisting = opts.preexistingIds ?? new Set<string>();
   const minRank = SEV_RANK[opts.minSeverityToComment ?? 'medium'];
+
+  const baseAvailable = opts.baseAvailable !== false;
+
+  // Base unavailable (e.g. shallow checkout): we cannot tell new from pre-existing,
+  // so report ALL drift honestly rather than mislabelling everything as "new", and
+  // do not let the caller fail the build on a count we can't trust.
+  if (!baseAvailable) {
+    const reportable = findings.filter((f) => SEV_RANK[f.severity] >= minRank);
+    const lines: string[] = [marker, '## Polder Drift', ''];
+    lines.push(
+      '> Base branch not available (shallow checkout), so this run cannot tell which ' +
+        'drift this PR introduced. Showing all drift. Add `fetch-depth: 0` to your ' +
+        'checkout for new-only reporting.',
+      '',
+    );
+    if (opts.adoptionPct !== undefined) {
+      lines.push(`**Design system adoption: ${opts.adoptionPct.toFixed(0)}%**`, '');
+    }
+    if (findings.length === 0) {
+      lines.push('No design system drift detected.', '', footer());
+    } else {
+      lines.push(`${findings.length} drift signal${findings.length === 1 ? '' : 's'} detected:`, '');
+      lines.push(...renderTable(findings));
+      lines.push('', footer());
+    }
+    return {
+      body: lines.join('\n'),
+      shouldComment: reportable.length > 0,
+      newFindings: [],
+      existingFindings: findings,
+    };
+  }
 
   const newFindings = findings.filter((f) => !preexisting.has(f.id));
   const existingFindings = findings.filter((f) => preexisting.has(f.id));

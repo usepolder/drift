@@ -3,14 +3,14 @@
 /******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ({
 
-/***/ 209:
+/***/ 281:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
 
-var loader = __nccwpck_require__(718);
-var dumper = __nccwpck_require__(396);
+var loader = __nccwpck_require__(950);
+var dumper = __nccwpck_require__(980);
 
 
 function renamed(from, to) {
@@ -21,32 +21,32 @@ function renamed(from, to) {
 }
 
 
-module.exports.Type = __nccwpck_require__(565);
-module.exports.Schema = __nccwpck_require__(878);
-module.exports.FAILSAFE_SCHEMA = __nccwpck_require__(344);
-module.exports.JSON_SCHEMA = __nccwpck_require__(383);
-module.exports.CORE_SCHEMA = __nccwpck_require__(378);
-module.exports.DEFAULT_SCHEMA = __nccwpck_require__(440);
+module.exports.Type = __nccwpck_require__(557);
+module.exports.Schema = __nccwpck_require__(46);
+module.exports.FAILSAFE_SCHEMA = __nccwpck_require__(832);
+module.exports.JSON_SCHEMA = __nccwpck_require__(927);
+module.exports.CORE_SCHEMA = __nccwpck_require__(746);
+module.exports.DEFAULT_SCHEMA = __nccwpck_require__(336);
 module.exports.load                = loader.load;
 module.exports.loadAll             = loader.loadAll;
 module.exports.dump                = dumper.dump;
-module.exports.YAMLException = __nccwpck_require__(264);
+module.exports.YAMLException = __nccwpck_require__(248);
 
 // Re-export all types in case user wants to create custom schema
 module.exports.types = {
-  binary:    __nccwpck_require__(813),
-  float:     __nccwpck_require__(360),
-  map:       __nccwpck_require__(276),
-  null:      __nccwpck_require__(229),
-  pairs:     __nccwpck_require__(387),
-  set:       __nccwpck_require__(430),
-  timestamp: __nccwpck_require__(446),
-  bool:      __nccwpck_require__(480),
-  int:       __nccwpck_require__(295),
-  merge:     __nccwpck_require__(206),
-  omap:      __nccwpck_require__(657),
-  seq:       __nccwpck_require__(289),
-  str:       __nccwpck_require__(769)
+  binary:    __nccwpck_require__(149),
+  float:     __nccwpck_require__(584),
+  map:       __nccwpck_require__(316),
+  null:      __nccwpck_require__(333),
+  pairs:     __nccwpck_require__(267),
+  set:       __nccwpck_require__(758),
+  timestamp: __nccwpck_require__(966),
+  bool:      __nccwpck_require__(296),
+  int:       __nccwpck_require__(271),
+  merge:     __nccwpck_require__(854),
+  omap:      __nccwpck_require__(649),
+  seq:       __nccwpck_require__(161),
+  str:       __nccwpck_require__(929)
 };
 
 // Removed functions from JS-YAML 3.0.x
@@ -57,7 +57,7 @@ module.exports.safeDump            = renamed('safeDump', 'dump');
 
 /***/ }),
 
-/***/ 216:
+/***/ 816:
 /***/ ((module) => {
 
 
@@ -123,16 +123,16 @@ module.exports.extend         = extend;
 
 /***/ }),
 
-/***/ 396:
+/***/ 980:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
 /*eslint-disable no-use-before-define*/
 
-var common              = __nccwpck_require__(216);
-var YAMLException       = __nccwpck_require__(264);
-var DEFAULT_SCHEMA      = __nccwpck_require__(440);
+var common              = __nccwpck_require__(816);
+var YAMLException       = __nccwpck_require__(248);
+var DEFAULT_SCHEMA      = __nccwpck_require__(336);
 
 var _toString       = Object.prototype.toString;
 var _hasOwnProperty = Object.prototype.hasOwnProperty;
@@ -1095,7 +1095,7 @@ module.exports.dump = dump;
 
 /***/ }),
 
-/***/ 264:
+/***/ 248:
 /***/ ((module) => {
 
 // YAML error class. http://stackoverflow.com/questions/8458984
@@ -1157,17 +1157,17 @@ module.exports = YAMLException;
 
 /***/ }),
 
-/***/ 718:
+/***/ 950:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
 /*eslint-disable max-len,no-use-before-define*/
 
-var common              = __nccwpck_require__(216);
-var YAMLException       = __nccwpck_require__(264);
-var makeSnippet         = __nccwpck_require__(856);
-var DEFAULT_SCHEMA      = __nccwpck_require__(440);
+var common              = __nccwpck_require__(816);
+var YAMLException       = __nccwpck_require__(248);
+var makeSnippet         = __nccwpck_require__(440);
+var DEFAULT_SCHEMA      = __nccwpck_require__(336);
 
 
 var _hasOwnProperty = Object.prototype.hasOwnProperty;
@@ -2897,15 +2897,15 @@ module.exports.load    = load;
 
 /***/ }),
 
-/***/ 878:
+/***/ 46:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
 /*eslint-disable max-len*/
 
-var YAMLException = __nccwpck_require__(264);
-var Type          = __nccwpck_require__(565);
+var YAMLException = __nccwpck_require__(248);
+var Type          = __nccwpck_require__(557);
 
 
 function compileList(schema, name) {
@@ -3025,7 +3025,7 @@ module.exports = Schema;
 
 /***/ }),
 
-/***/ 378:
+/***/ 746:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 // Standard YAML's Core schema.
@@ -3038,12 +3038,12 @@ module.exports = Schema;
 
 
 
-module.exports = __nccwpck_require__(383);
+module.exports = __nccwpck_require__(927);
 
 
 /***/ }),
 
-/***/ 440:
+/***/ 336:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 // JS-YAML's default schema for `safeLoad` function.
@@ -3056,23 +3056,23 @@ module.exports = __nccwpck_require__(383);
 
 
 
-module.exports = (__nccwpck_require__(378).extend)({
+module.exports = (__nccwpck_require__(746).extend)({
   implicit: [
-    __nccwpck_require__(446),
-    __nccwpck_require__(206)
+    __nccwpck_require__(966),
+    __nccwpck_require__(854)
   ],
   explicit: [
-    __nccwpck_require__(813),
-    __nccwpck_require__(657),
-    __nccwpck_require__(387),
-    __nccwpck_require__(430)
+    __nccwpck_require__(149),
+    __nccwpck_require__(649),
+    __nccwpck_require__(267),
+    __nccwpck_require__(758)
   ]
 });
 
 
 /***/ }),
 
-/***/ 344:
+/***/ 832:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 // Standard YAML's Failsafe schema.
@@ -3082,21 +3082,21 @@ module.exports = (__nccwpck_require__(378).extend)({
 
 
 
-var Schema = __nccwpck_require__(878);
+var Schema = __nccwpck_require__(46);
 
 
 module.exports = new Schema({
   explicit: [
-    __nccwpck_require__(769),
-    __nccwpck_require__(289),
-    __nccwpck_require__(276)
+    __nccwpck_require__(929),
+    __nccwpck_require__(161),
+    __nccwpck_require__(316)
   ]
 });
 
 
 /***/ }),
 
-/***/ 383:
+/***/ 927:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 // Standard YAML's JSON schema.
@@ -3110,25 +3110,25 @@ module.exports = new Schema({
 
 
 
-module.exports = (__nccwpck_require__(344).extend)({
+module.exports = (__nccwpck_require__(832).extend)({
   implicit: [
-    __nccwpck_require__(229),
-    __nccwpck_require__(480),
-    __nccwpck_require__(295),
-    __nccwpck_require__(360)
+    __nccwpck_require__(333),
+    __nccwpck_require__(296),
+    __nccwpck_require__(271),
+    __nccwpck_require__(584)
   ]
 });
 
 
 /***/ }),
 
-/***/ 856:
+/***/ 440:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
 
-var common = __nccwpck_require__(216);
+var common = __nccwpck_require__(816);
 
 
 // get snippet for a single line, respecting maxLength
@@ -3230,12 +3230,12 @@ module.exports = makeSnippet;
 
 /***/ }),
 
-/***/ 565:
+/***/ 557:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var YAMLException = __nccwpck_require__(264);
+var YAMLException = __nccwpck_require__(248);
 
 var TYPE_CONSTRUCTOR_OPTIONS = [
   'kind',
@@ -3303,7 +3303,7 @@ module.exports = Type;
 
 /***/ }),
 
-/***/ 813:
+/***/ 149:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
@@ -3311,7 +3311,7 @@ module.exports = Type;
 /*eslint-disable no-bitwise*/
 
 
-var Type = __nccwpck_require__(565);
+var Type = __nccwpck_require__(557);
 
 
 // [ 64, 65, 66 ] -> [ padding, CR, LF ]
@@ -3435,12 +3435,12 @@ module.exports = new Type('tag:yaml.org,2002:binary', {
 
 /***/ }),
 
-/***/ 480:
+/***/ 296:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var Type = __nccwpck_require__(565);
+var Type = __nccwpck_require__(557);
 
 function resolveYamlBoolean(data) {
   if (data === null) return false;
@@ -3477,13 +3477,13 @@ module.exports = new Type('tag:yaml.org,2002:bool', {
 
 /***/ }),
 
-/***/ 360:
+/***/ 584:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var common = __nccwpck_require__(216);
-var Type   = __nccwpck_require__(565);
+var common = __nccwpck_require__(816);
+var Type   = __nccwpck_require__(557);
 
 var YAML_FLOAT_PATTERN = new RegExp(
   // 2.5e4, 2.5 and integers
@@ -3581,13 +3581,13 @@ module.exports = new Type('tag:yaml.org,2002:float', {
 
 /***/ }),
 
-/***/ 295:
+/***/ 271:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var common = __nccwpck_require__(216);
-var Type   = __nccwpck_require__(565);
+var common = __nccwpck_require__(816);
+var Type   = __nccwpck_require__(557);
 
 function isHexCode(c) {
   return ((0x30/* 0 */ <= c) && (c <= 0x39/* 9 */)) ||
@@ -3744,12 +3744,12 @@ module.exports = new Type('tag:yaml.org,2002:int', {
 
 /***/ }),
 
-/***/ 276:
+/***/ 316:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var Type = __nccwpck_require__(565);
+var Type = __nccwpck_require__(557);
 
 module.exports = new Type('tag:yaml.org,2002:map', {
   kind: 'mapping',
@@ -3759,12 +3759,12 @@ module.exports = new Type('tag:yaml.org,2002:map', {
 
 /***/ }),
 
-/***/ 206:
+/***/ 854:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var Type = __nccwpck_require__(565);
+var Type = __nccwpck_require__(557);
 
 function resolveYamlMerge(data) {
   return data === '<<' || data === null;
@@ -3778,12 +3778,12 @@ module.exports = new Type('tag:yaml.org,2002:merge', {
 
 /***/ }),
 
-/***/ 229:
+/***/ 333:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var Type = __nccwpck_require__(565);
+var Type = __nccwpck_require__(557);
 
 function resolveYamlNull(data) {
   if (data === null) return true;
@@ -3820,12 +3820,12 @@ module.exports = new Type('tag:yaml.org,2002:null', {
 
 /***/ }),
 
-/***/ 657:
+/***/ 649:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var Type = __nccwpck_require__(565);
+var Type = __nccwpck_require__(557);
 
 var _hasOwnProperty = Object.prototype.hasOwnProperty;
 var _toString       = Object.prototype.toString;
@@ -3871,12 +3871,12 @@ module.exports = new Type('tag:yaml.org,2002:omap', {
 
 /***/ }),
 
-/***/ 387:
+/***/ 267:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var Type = __nccwpck_require__(565);
+var Type = __nccwpck_require__(557);
 
 var _toString = Object.prototype.toString;
 
@@ -3931,12 +3931,12 @@ module.exports = new Type('tag:yaml.org,2002:pairs', {
 
 /***/ }),
 
-/***/ 289:
+/***/ 161:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var Type = __nccwpck_require__(565);
+var Type = __nccwpck_require__(557);
 
 module.exports = new Type('tag:yaml.org,2002:seq', {
   kind: 'sequence',
@@ -3946,12 +3946,12 @@ module.exports = new Type('tag:yaml.org,2002:seq', {
 
 /***/ }),
 
-/***/ 430:
+/***/ 758:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var Type = __nccwpck_require__(565);
+var Type = __nccwpck_require__(557);
 
 var _hasOwnProperty = Object.prototype.hasOwnProperty;
 
@@ -3982,12 +3982,12 @@ module.exports = new Type('tag:yaml.org,2002:set', {
 
 /***/ }),
 
-/***/ 769:
+/***/ 929:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var Type = __nccwpck_require__(565);
+var Type = __nccwpck_require__(557);
 
 module.exports = new Type('tag:yaml.org,2002:str', {
   kind: 'scalar',
@@ -3997,12 +3997,12 @@ module.exports = new Type('tag:yaml.org,2002:str', {
 
 /***/ }),
 
-/***/ 446:
+/***/ 966:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-var Type = __nccwpck_require__(565);
+var Type = __nccwpck_require__(557);
 
 var YAML_DATE_REGEXP = new RegExp(
   '^([0-9][0-9][0-9][0-9])'          + // [1] year
@@ -4092,7 +4092,7 @@ module.exports = new Type('tag:yaml.org,2002:timestamp', {
 
 /***/ }),
 
-/***/ 72:
+/***/ 581:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -4140,9 +4140,9 @@ exports.runScan = runScan;
 const fs = __importStar(__nccwpck_require__(896));
 const path = __importStar(__nccwpck_require__(928));
 const child_process_1 = __nccwpck_require__(317);
-const resolve_config_1 = __nccwpck_require__(653);
-const parser_1 = __nccwpck_require__(459);
-const init_1 = __nccwpck_require__(663);
+const resolve_config_1 = __nccwpck_require__(190);
+const parser_1 = __nccwpck_require__(196);
+const init_1 = __nccwpck_require__(722);
 const SOURCE_RE = /\.(ts|tsx|js|jsx)$/;
 const TOP_HELP = `polder-drift — design system drift detection
 
@@ -4475,7 +4475,7 @@ if (require.main === require.cache[eval('__filename')]) {
     const argv = process.argv.slice(2);
     if (argv[0] === 'ci') {
         // Async command (posts a PR comment); lazy-import to keep `scan` startup light.
-        Promise.resolve().then(() => __importStar(__nccwpck_require__(189))).then(({ runCiSubcommand }) => runCiSubcommand(argv.slice(1)))
+        Promise.resolve().then(() => __importStar(__nccwpck_require__(59))).then(({ runCiSubcommand }) => runCiSubcommand(argv.slice(1)))
             .then((code) => process.exit(code))
             .catch((err) => {
             process.stderr.write(`polder-drift: ${err.message}\n`);
@@ -4490,7 +4490,7 @@ if (require.main === require.cache[eval('__filename')]) {
 
 /***/ }),
 
-/***/ 189:
+/***/ 59:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 
@@ -4500,9 +4500,9 @@ exports.runCiSubcommand = runCiSubcommand;
  * `polder-drift ci` — post the drift comment from inside a CI PR build.
  * v1 targets Azure DevOps (GitHub uses the Action). Local runs should use `scan`.
  */
-const detect_1 = __nccwpck_require__(682);
-const azdo_1 = __nccwpck_require__(499);
-const run_ci_1 = __nccwpck_require__(288);
+const detect_1 = __nccwpck_require__(530);
+const azdo_1 = __nccwpck_require__(588);
+const run_ci_1 = __nccwpck_require__(479);
 async function runCiSubcommand(_argv) {
     const warn = (m) => {
         process.stderr.write(m + '\n');
@@ -4533,7 +4533,7 @@ async function runCiSubcommand(_argv) {
 
 /***/ }),
 
-/***/ 663:
+/***/ 722:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -4577,7 +4577,7 @@ exports.runInitSubcommand = runInitSubcommand;
  */
 const fs = __importStar(__nccwpck_require__(896));
 const path = __importStar(__nccwpck_require__(928));
-const detect_1 = __nccwpck_require__(275);
+const detect_1 = __nccwpck_require__(52);
 function runInitSubcommand(_argv, cwd = process.cwd()) {
     const target = path.join(cwd, '.polder.yml');
     if (fs.existsSync(target)) {
@@ -4603,7 +4603,7 @@ function runInitSubcommand(_argv, cwd = process.cwd()) {
 
 /***/ }),
 
-/***/ 466:
+/***/ 981:
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -4624,7 +4624,7 @@ function adoptionPct(canonicalUsages, driftSignals) {
 
 /***/ }),
 
-/***/ 564:
+/***/ 701:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 
@@ -4637,12 +4637,13 @@ exports.analyzePr = analyzePr;
  * this is fully unit-testable without git or a network. GitHub and Azure DevOps
  * transports supply the readers and then post `result.body` when `result.shouldComment`.
  */
-const parser_1 = __nccwpck_require__(459);
-const findings_1 = __nccwpck_require__(963);
-const suppress_1 = __nccwpck_require__(509);
-const render_1 = __nccwpck_require__(70);
-const adoption_1 = __nccwpck_require__(466);
+const parser_1 = __nccwpck_require__(196);
+const findings_1 = __nccwpck_require__(363);
+const suppress_1 = __nccwpck_require__(10);
+const render_1 = __nccwpck_require__(665);
+const adoption_1 = __nccwpck_require__(981);
 function analyzePr(p) {
+    const baseAvailable = p.baseAvailable !== false;
     let findings = [];
     let canonicalUsages = 0;
     for (const file of p.files) {
@@ -4668,7 +4669,7 @@ function analyzePr(p) {
     // from the base versions of the changed files.
     let preexistingIds;
     let adoptionDeltaPct;
-    if (p.readBase) {
+    if (p.readBase && baseAvailable) {
         preexistingIds = new Set();
         let baseCanonical = 0;
         let baseDrift = 0;
@@ -4677,7 +4678,9 @@ function analyzePr(p) {
             if (base == null)
                 continue;
             const res = (0, parser_1.checkDriftFull)(base, p.dsExports, p.canonicalPkgs, p.allowlist, file);
-            const baseFindings = (0, findings_1.flattenFindings)(file, res);
+            // Suppress base findings the same way head findings are (analyze above), so the
+            // adoption delta compares like with like and .polderignore doesn't fake a gain.
+            const baseFindings = (0, suppress_1.applySuppressions)((0, findings_1.flattenFindings)(file, res), p.suppress);
             for (const f of baseFindings)
                 preexistingIds.add(f.id);
             baseDrift += baseFindings.length;
@@ -4696,14 +4699,15 @@ function analyzePr(p) {
         adoptionDeltaPct,
         minSeverityToComment: p.minSeverityToComment,
         marker: p.marker,
+        baseAvailable,
     });
-    return { ...render, totalFindings: findings.length, adoptionPct: adopt };
+    return { ...render, totalFindings: findings.length, adoptionPct: adopt, baseAvailable };
 }
 
 
 /***/ }),
 
-/***/ 963:
+/***/ 363:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 
@@ -4766,14 +4770,14 @@ function flattenFindings(file, result) {
 
 /***/ }),
 
-/***/ 70:
+/***/ 665:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.COMMENT_MARKER = void 0;
 exports.renderComment = renderComment;
-const findings_1 = __nccwpck_require__(963);
+const findings_1 = __nccwpck_require__(363);
 exports.COMMENT_MARKER = '<!-- polder-drift-comment -->';
 const SEV_RANK = { high: 2, medium: 1 };
 const RULE_ORDER = ['import-drift', 'local-shadow', 'token-fingerprint', 'prop-match', 'subcomponent'];
@@ -4781,6 +4785,34 @@ function renderComment(findings, opts = {}) {
     const marker = opts.marker ?? exports.COMMENT_MARKER;
     const preexisting = opts.preexistingIds ?? new Set();
     const minRank = SEV_RANK[opts.minSeverityToComment ?? 'medium'];
+    const baseAvailable = opts.baseAvailable !== false;
+    // Base unavailable (e.g. shallow checkout): we cannot tell new from pre-existing,
+    // so report ALL drift honestly rather than mislabelling everything as "new", and
+    // do not let the caller fail the build on a count we can't trust.
+    if (!baseAvailable) {
+        const reportable = findings.filter((f) => SEV_RANK[f.severity] >= minRank);
+        const lines = [marker, '## Polder Drift', ''];
+        lines.push('> Base branch not available (shallow checkout), so this run cannot tell which ' +
+            'drift this PR introduced. Showing all drift. Add `fetch-depth: 0` to your ' +
+            'checkout for new-only reporting.', '');
+        if (opts.adoptionPct !== undefined) {
+            lines.push(`**Design system adoption: ${opts.adoptionPct.toFixed(0)}%**`, '');
+        }
+        if (findings.length === 0) {
+            lines.push('No design system drift detected.', '', footer());
+        }
+        else {
+            lines.push(`${findings.length} drift signal${findings.length === 1 ? '' : 's'} detected:`, '');
+            lines.push(...renderTable(findings));
+            lines.push('', footer());
+        }
+        return {
+            body: lines.join('\n'),
+            shouldComment: reportable.length > 0,
+            newFindings: [],
+            existingFindings: findings,
+        };
+    }
     const newFindings = findings.filter((f) => !preexisting.has(f.id));
     const existingFindings = findings.filter((f) => preexisting.has(f.id));
     const hasReportableNew = newFindings.some((f) => SEV_RANK[f.severity] >= minRank);
@@ -4836,7 +4868,7 @@ function footer() {
 
 /***/ }),
 
-/***/ 509:
+/***/ 10:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -4960,7 +4992,7 @@ function applySuppressions(findings, s) {
 
 /***/ }),
 
-/***/ 750:
+/***/ 973:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -5000,7 +5032,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.parseConfig = parseConfig;
 exports.readConfig = readConfig;
-const yaml = __importStar(__nccwpck_require__(209));
+const yaml = __importStar(__nccwpck_require__(281));
 function parseConfig(raw) {
     let parsed;
     try {
@@ -5024,6 +5056,9 @@ function parseConfig(raw) {
         if (cfg.component_library.length === 0) {
             throw new Error('component_library is required in .polder.yml');
         }
+        if (!cfg.component_library.every((x) => typeof x === 'string')) {
+            throw new Error('component_library entries must all be strings');
+        }
         componentLibrary = cfg.component_library;
     }
     else {
@@ -5031,7 +5066,9 @@ function parseConfig(raw) {
     }
     return {
         componentLibrary,
-        allowlist: Array.isArray(cfg.allowlist) ? cfg.allowlist : [],
+        // Keep only string entries; a non-string allowlist value is ignored rather than
+        // crashing later string operations.
+        allowlist: Array.isArray(cfg.allowlist) ? cfg.allowlist.filter((x) => typeof x === 'string') : [],
         failOnDrift: cfg.fail_on_drift === true,
     };
 }
@@ -5044,7 +5081,7 @@ function readConfig(content) {
 
 /***/ }),
 
-/***/ 275:
+/***/ 52:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -5109,11 +5146,20 @@ exports.KNOWN_DS_PACKAGES = [
     'grommet',
 ];
 function detectComponentLibrary(cwd, known = exports.KNOWN_DS_PACKAGES) {
-    let pkg;
+    let raw;
     try {
-        pkg = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'));
+        raw = fs.readFileSync(path.join(cwd, 'package.json'), 'utf8');
     }
     catch {
+        return { libraries: [], source: 'none' }; // no package.json — nothing to detect
+    }
+    let pkg;
+    try {
+        pkg = JSON.parse(raw);
+    }
+    catch {
+        // A present-but-invalid package.json is a different problem from "no DS"; surface it.
+        process.stderr.write(`polder-drift: package.json in ${cwd} is not valid JSON; skipping auto-detection.\n`);
         return { libraries: [], source: 'none' };
     }
     const deps = { ...(pkg.dependencies ?? {}), ...(pkg.peerDependencies ?? {}) };
@@ -5124,7 +5170,7 @@ function detectComponentLibrary(cwd, known = exports.KNOWN_DS_PACKAGES) {
 
 /***/ }),
 
-/***/ 459:
+/***/ 196:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -5171,7 +5217,7 @@ exports.checkInlineDrift = checkInlineDrift;
 exports.checkDriftFull = checkDriftFull;
 const fs = __importStar(__nccwpck_require__(896));
 const path = __importStar(__nccwpck_require__(928));
-const parser_1 = __nccwpck_require__(437);
+const parser_1 = __nccwpck_require__(429);
 const BABEL_OPTIONS = {
     plugins: ['typescript', 'jsx'],
     sourceType: 'module',
@@ -5360,6 +5406,10 @@ function countCanonicalUsages(fileContent, dsExports, canonicalPkgs) {
                     : specifier.local.name;
                 if (dsExports.size === 0 || dsExports.has(localName))
                     count++;
+            }
+            else if (specifier.type === 'ImportNamespaceSpecifier') {
+                // `import * as DS from '@acme/ds'` is canonical usage of the package.
+                count++;
             }
         }
     }
@@ -5750,13 +5800,13 @@ function checkDriftFull(fileContent, dsExports, canonicalPkgs, allowlist, filena
 
 /***/ }),
 
-/***/ 499:
+/***/ 588:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.AzdoPlatform = void 0;
-const git_1 = __nccwpck_require__(909);
+const git_1 = __nccwpck_require__(160);
 const SOURCE_RE = /\.(ts|tsx|js|jsx)$/;
 const API_VERSION = '7.1-preview.1';
 class AzdoPlatform {
@@ -5837,17 +5887,27 @@ class AzdoPlatform {
         return null;
     }
     async api(url, method, body) {
-        const res = await fetch(url, {
-            method,
-            headers: {
-                Authorization: `Bearer ${this.token}`,
-                'Content-Type': 'application/json',
-            },
-            body: body === undefined ? undefined : JSON.stringify(body),
-        });
-        if (!res.ok)
-            throw new Error(`${method} ${res.status} ${res.statusText}`);
-        return res.status === 204 ? null : res.json();
+        // Bound the request so a slow/black-holed Azure DevOps endpoint fails the step
+        // fast instead of hanging until the agent's job timeout.
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 15000);
+        try {
+            const res = await fetch(url, {
+                method,
+                headers: {
+                    Authorization: `Bearer ${this.token}`,
+                    'Content-Type': 'application/json',
+                },
+                body: body === undefined ? undefined : JSON.stringify(body),
+                signal: controller.signal,
+            });
+            if (!res.ok)
+                throw new Error(`${method} ${res.status} ${res.statusText}`);
+            return res.status === 204 ? null : res.json();
+        }
+        finally {
+            clearTimeout(timer);
+        }
     }
 }
 exports.AzdoPlatform = AzdoPlatform;
@@ -5855,7 +5915,7 @@ exports.AzdoPlatform = AzdoPlatform;
 
 /***/ }),
 
-/***/ 682:
+/***/ 530:
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -5873,11 +5933,12 @@ function detectPlatform(env = process.env) {
 
 /***/ }),
 
-/***/ 909:
+/***/ 160:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.baseRefExists = baseRefExists;
 exports.readBaseFile = readBaseFile;
 exports.blameIntroducingCommit = blameIntroducingCommit;
 exports.diffChangedFiles = diffChangedFiles;
@@ -5894,6 +5955,10 @@ function git(cwd, args) {
     catch {
         return null;
     }
+}
+/** True if the base ref resolves to a commit in the local clone. */
+function baseRefExists(cwd, baseRef) {
+    return git(cwd, ['rev-parse', '--verify', '--quiet', `${baseRef}^{commit}`]) !== null;
 }
 /** Base-branch version of a file (for "new in this PR" diffing). */
 function readBaseFile(cwd, baseRef, file) {
@@ -5926,7 +5991,7 @@ function diffChangedFiles(cwd, baseRef) {
 
 /***/ }),
 
-/***/ 653:
+/***/ 190:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -5972,8 +6037,8 @@ exports.resolveConfig = resolveConfig;
  *   3. Otherwise null (caller shows guidance).
  */
 const fs = __importStar(__nccwpck_require__(896));
-const config_1 = __nccwpck_require__(750);
-const detect_1 = __nccwpck_require__(275);
+const config_1 = __nccwpck_require__(973);
+const detect_1 = __nccwpck_require__(52);
 function resolveConfig(cwd, configPath) {
     let content = null;
     try {
@@ -5996,7 +6061,7 @@ function resolveConfig(cwd, configPath) {
 
 /***/ }),
 
-/***/ 288:
+/***/ 479:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -6043,12 +6108,12 @@ exports.runCi = runCi;
  */
 const fs = __importStar(__nccwpck_require__(896));
 const path = __importStar(__nccwpck_require__(928));
-const resolve_config_1 = __nccwpck_require__(653);
-const parser_1 = __nccwpck_require__(459);
-const analyze_1 = __nccwpck_require__(564);
-const suppress_1 = __nccwpck_require__(509);
-const render_1 = __nccwpck_require__(70);
-const git_1 = __nccwpck_require__(909);
+const resolve_config_1 = __nccwpck_require__(190);
+const parser_1 = __nccwpck_require__(196);
+const analyze_1 = __nccwpck_require__(701);
+const suppress_1 = __nccwpck_require__(10);
+const render_1 = __nccwpck_require__(665);
+const git_1 = __nccwpck_require__(160);
 function resolveDsExports(config, workspace, warn) {
     const nodeModules = path.join(workspace, 'node_modules');
     const dsExports = new Set();
@@ -6085,6 +6150,14 @@ async function runCi(platform, opts = {}) {
     const suppress = (0, suppress_1.loadSuppressions)(workspace);
     const baseRef = platform.getBaseRef();
     const files = await platform.getChangedSourceFiles();
+    // Is the base commit actually in the local clone? On a shallow checkout it often
+    // isn't, in which case we cannot distinguish new from pre-existing drift.
+    const baseAvailable = baseRef ? (0, git_1.baseRefExists)(workspace, baseRef) : false;
+    if (baseRef && !baseAvailable) {
+        warn(`Polder Drift: base ref "${baseRef}" is not in the local clone (shallow checkout?). ` +
+            `Cannot tell new from pre-existing drift; reporting all and NOT failing on drift. ` +
+            `Add "fetch-depth: 0" to your checkout step.`);
+    }
     const result = (0, analyze_1.analyzePr)({
         files,
         readCurrent: (file) => {
@@ -6095,20 +6168,26 @@ async function runCi(platform, opts = {}) {
                 return null;
             }
         },
-        readBase: baseRef ? (file) => (0, git_1.readBaseFile)(workspace, baseRef, file) : undefined,
+        readBase: baseAvailable ? (file) => (0, git_1.readBaseFile)(workspace, baseRef, file) : undefined,
         blame: (file) => (0, git_1.blameIntroducingCommit)(workspace, baseRef, file),
+        baseAvailable,
         dsExports,
         canonicalPkgs: config.componentLibrary,
         allowlist: config.allowlist,
         suppress,
     });
-    // Post a new comment only when there is reportable new drift; otherwise update an
+    // Post a new comment only when there is reportable drift; otherwise update an
     // existing comment (to clear a prior alert) but do not create noise on a clean PR.
     await platform.upsertComment(result.body, render_1.COMMENT_MARKER, result.shouldComment);
     const failOnDrift = opts.failOnDriftOverride ?? config.failOnDrift;
-    const failed = failOnDrift && result.newFindings.length > 0;
+    // Only fail on "new" drift when we could actually determine what's new. When the base
+    // is unavailable, failing would punish PRs for pre-existing drift, so we never do.
+    const failed = failOnDrift && result.baseAvailable && result.newFindings.length > 0;
     if (failed) {
         platform.fail(`Polder Drift: ${result.newFindings.length} new drift signal(s) introduced by this PR`);
+    }
+    else if (failOnDrift && !result.baseAvailable && result.totalFindings > 0) {
+        warn('Polder Drift: fail-on-drift skipped because the base ref was unavailable (see above).');
     }
     return {
         status: 'analyzed',
@@ -6151,7 +6230,7 @@ module.exports = require("path");
 
 /***/ }),
 
-/***/ 437:
+/***/ 429:
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -20799,7 +20878,7 @@ exports.tokTypes = tokTypes;
 /******/ 	// startup
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __nccwpck_require__(72);
+/******/ 	var __webpack_exports__ = __nccwpck_require__(581);
 /******/ 	module.exports = __webpack_exports__;
 /******/ 	
 /******/ })()
