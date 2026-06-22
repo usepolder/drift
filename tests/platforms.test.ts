@@ -3,8 +3,11 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { execFileSync } from 'child_process';
+import * as core from '@actions/core';
+import * as github from '@actions/github';
 import { detectPlatform } from '../src/platforms/detect';
 import { AzdoPlatform } from '../src/platforms/azdo';
+import { GitHubPlatform } from '../src/platforms/github';
 import { runCi } from '../src/run-ci';
 import type { PrPlatform } from '../src/platforms/types';
 
@@ -153,6 +156,79 @@ describe('AzdoPlatform.findExistingComment pagination', () => {
     // A failed read must NOT fall through to a POST that double-posts the comment.
     const posted = fetchMock.mock.calls.some(([, init]) => method(init as RequestInit) === 'POST');
     expect(posted).toBe(false);
+  });
+});
+
+// GitHubPlatform.findExistingComment walks every page of issue comments so the marker
+// isn't missed on a PR with >100 comments (which would duplicate-post). Drive the real
+// pagination loop through upsertComment with a stubbed octokit + Action context — the
+// GitHub analog of the AzDO fetch-stub test above.
+describe('GitHubPlatform.findExistingComment pagination', () => {
+  const ORIG_REPO = process.env.GITHUB_REPOSITORY;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    github.context.payload = {};
+    if (ORIG_REPO === undefined) delete process.env.GITHUB_REPOSITORY;
+    else process.env.GITHUB_REPOSITORY = ORIG_REPO;
+  });
+
+  interface Comment {
+    id: number;
+    body: string;
+  }
+
+  // Build a GitHubPlatform whose octokit serves `pages` of issue comments (the `page`
+  // param is 1-based). Returns the platform plus the listComments/update/create spies.
+  function platformWith(pages: Comment[][]) {
+    const listComments = vi.fn(async ({ page }: { page: number }) => ({ data: pages[page - 1] ?? [] }));
+    const updateComment = vi.fn(async () => ({ data: {} }));
+    const createComment = vi.fn(async () => ({ data: {} }));
+    const octokit = { rest: { issues: { listComments, updateComment, createComment } } };
+
+    vi.spyOn(github, 'getOctokit').mockReturnValue(octokit as unknown as ReturnType<typeof github.getOctokit>);
+    vi.spyOn(core, 'getInput').mockReturnValue('test-token');
+    process.env.GITHUB_REPOSITORY = 'acme/web';
+    github.context.payload = { pull_request: { number: 42, base: { sha: 'base-sha' } } };
+
+    return { platform: GitHubPlatform.fromEnv()!, listComments, updateComment, createComment };
+  }
+
+  // A full 100-comment page forces the loop to request the next page; a short page (or
+  // the marker turning up) ends the walk.
+  const fullPage = (start: number): Comment[] =>
+    Array.from({ length: 100 }, (_, i) => ({ id: start + i, body: `noise ${start + i}` }));
+
+  it('walks to a later page and updates the marker comment found there', async () => {
+    const marker = '<!--polder-drift-->';
+    const { platform, listComments, updateComment, createComment } = platformWith([
+      fullPage(1), // page 1: 100 unrelated comments → must page on
+      [{ id: 999, body: `prior body ${marker}` }], // page 2: our comment, short page → stop
+    ]);
+
+    await expect(platform.upsertComment('new body', marker, true)).resolves.toBe(true);
+
+    expect(listComments).toHaveBeenCalledTimes(2);
+    expect(listComments.mock.calls[1][0]).toMatchObject({ page: 2, per_page: 100 }); // second page requested
+    expect(updateComment).toHaveBeenCalledTimes(1);
+    expect(updateComment.mock.calls[0][0]).toMatchObject({ comment_id: 999, body: 'new body' }); // updated, not duplicated
+    expect(createComment).not.toHaveBeenCalled();
+  });
+
+  it('stops on the first short page without over-fetching', async () => {
+    const { platform, listComments } = platformWith([
+      [{ id: 1, body: 'only page' }], // a single sub-100 page means there is no second page to fetch
+    ]);
+    await expect(platform.upsertComment('body', '<!--polder-drift-->', true)).resolves.toBe(true);
+    expect(listComments).toHaveBeenCalledTimes(1);
+  });
+
+  it('propagates a list failure instead of reporting "no comment" (which would duplicate-post)', async () => {
+    const { platform, listComments, createComment } = platformWith([]);
+    listComments.mockRejectedValueOnce(new Error('HttpError: 500'));
+    await expect(platform.upsertComment('body', '<!--polder-drift-->', true)).rejects.toThrow('500');
+    // A failed read must NOT fall through to a create that double-posts the comment.
+    expect(createComment).not.toHaveBeenCalled();
   });
 });
 

@@ -35452,6 +35452,10 @@ const core = __importStar(__nccwpck_require__(7484));
 const github = __importStar(__nccwpck_require__(3228));
 const SOURCE_RE = /\.(ts|tsx|js|jsx)$/;
 const MAX_FILES = 100;
+const COMMENTS_PER_PAGE = 100;
+// Upper bound on comment pages we walk, so a misbehaving API can't loop us forever.
+// Even very busy PRs hold far fewer than 50 * 100 = 5000 issue comments.
+const MAX_COMMENT_PAGES = 50;
 class GitHubPlatform {
     octokit;
     owner;
@@ -35516,15 +35520,32 @@ class GitHubPlatform {
     fail(message) {
         core.setFailed(message);
     }
+    /**
+     * Find our existing Polder comment by scanning every page of the PR's issue
+     * comments. A single 100-comment page can miss our marker on a busy PR and post a
+     * duplicate, so we walk pages until one comes back short (capped at
+     * MAX_COMMENT_PAGES so a misbehaving API can't loop forever). Octokit throws on a
+     * non-2xx response, so a transient list error propagates rather than masquerading
+     * as "no existing comment" (which would duplicate-post), matching the AzDO path.
+     */
     async findExistingComment(marker) {
-        const { data: comments } = await this.octokit.rest.issues.listComments({
-            owner: this.owner,
-            repo: this.repo,
-            issue_number: this.prNumber,
-            per_page: 100,
-        });
-        const mine = comments.filter((c) => c.body?.includes(marker));
-        return mine.length > 0 ? mine[mine.length - 1].id : null;
+        const mine = [];
+        for (let page = 1; page <= MAX_COMMENT_PAGES; page++) {
+            const { data: comments } = await this.octokit.rest.issues.listComments({
+                owner: this.owner,
+                repo: this.repo,
+                issue_number: this.prNumber,
+                per_page: COMMENTS_PER_PAGE,
+                page,
+            });
+            for (const c of comments) {
+                if (c.body?.includes(marker))
+                    mine.push(c.id);
+            }
+            if (comments.length < COMMENTS_PER_PAGE)
+                break;
+        }
+        return mine.length > 0 ? mine[mine.length - 1] : null;
     }
 }
 exports.GitHubPlatform = GitHubPlatform;
