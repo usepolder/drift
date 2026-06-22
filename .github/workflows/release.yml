@@ -3,10 +3,12 @@ name: Release
 on:
   push:
     tags:
-      - 'v*'
+      # Full semver tags only (e.g. v1.0.0). The moving major tag (v1) this
+      # workflow pushes below does NOT match, so it never re-triggers the run.
+      - 'v[0-9]+.[0-9]+.[0-9]+'
 
 permissions:
-  contents: read
+  contents: write # create the GitHub Release and move the major tag
   id-token: write # required for npm provenance via OIDC
 
 jobs:
@@ -28,3 +30,20 @@ jobs:
       - run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      # Create the GitHub Release for this tag. The Release is what the Marketplace
+      # listing tracks; the first listing is enabled once via the Release page UI
+      # ("Publish this Action to the GitHub Marketplace"), after which new releases
+      # keep it current. --verify-tag guards against publishing a non-existent tag.
+      - name: Create GitHub Release
+        run: gh release create "$GITHUB_REF_NAME" --verify-tag --generate-notes --title "$GITHUB_REF_NAME"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      # Move the floating major tag (e.g. v1) to this release so `usepolder/drift@v1`
+      # always resolves to the latest v1.x.x. Consumers pin to @v1, not @v1.0.0.
+      - name: Update major version tag
+        run: |
+          MAJOR="v$(node -p "require('./package.json').version.split('.')[0]")"
+          git tag -f "$MAJOR"
+          git push origin "$MAJOR" --force
