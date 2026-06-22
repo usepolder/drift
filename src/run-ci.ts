@@ -20,7 +20,10 @@ export interface RunCiResult {
   newFindings: number;
   totalFindings: number;
   adoptionPct?: number;
+  /** True only when a comment was actually written (created/updated), not merely intended. */
   posted: boolean;
+  /** Set when the comment write/read failed; the comment is NOT on the PR. */
+  postError?: string;
   failed: boolean;
 }
 
@@ -96,7 +99,17 @@ export async function runCi(
 
   // Post a new comment only when there is reportable drift; otherwise update an
   // existing comment (to clear a prior alert) but do not create noise on a clean PR.
-  await platform.upsertComment(result.body, COMMENT_MARKER, result.shouldComment);
+  // Track the true write outcome: a swallowed failure must not be reported as posted.
+  let posted = false;
+  let postError: string | undefined;
+  try {
+    posted = await platform.upsertComment(result.body, COMMENT_MARKER, result.shouldComment);
+  } catch (err) {
+    postError = (err as Error).message;
+    // Surface loudly — otherwise a fail-on-drift run goes red with no comment on the
+    // PR explaining why (e.g. the build identity lacks "Contribute to pull requests").
+    warn(`Polder Drift: failed to post the drift comment — it is NOT on the PR: ${postError}`);
+  }
 
   const failOnDrift = opts.failOnDriftOverride ?? config.failOnDrift;
   // Only fail on "new" drift when we could actually determine what's new. When the base
@@ -104,7 +117,8 @@ export async function runCi(
   const failed = failOnDrift && result.baseAvailable && result.newFindings.length > 0;
   if (failed) {
     platform.fail(
-      `Polder Drift: ${result.newFindings.length} new drift signal(s) introduced by this PR`,
+      `Polder Drift: ${result.newFindings.length} new drift signal(s) introduced by this PR` +
+        (postError ? ` — and the explanatory comment could not be posted (${postError})` : ''),
     );
   } else if (failOnDrift && !result.baseAvailable && result.totalFindings > 0) {
     warn('Polder Drift: fail-on-drift skipped because the base ref was unavailable (see above).');
@@ -115,7 +129,8 @@ export async function runCi(
     newFindings: result.newFindings.length,
     totalFindings: result.totalFindings,
     adoptionPct: result.adoptionPct,
-    posted: result.shouldComment,
+    posted,
+    postError,
     failed,
   };
 }

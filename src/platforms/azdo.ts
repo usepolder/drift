@@ -11,6 +11,12 @@ import { diffChangedFiles } from './git';
 
 const SOURCE_RE = /\.(ts|tsx|js|jsx)$/;
 const API_VERSION = '7.1-preview.1';
+// Upper bound on threads pages we follow via continuation token, so a misbehaving
+// server can't loop us forever. Even very busy PRs hold far fewer than this.
+const MAX_THREAD_PAGES = 50;
+// Hard cap per request so a slow/black-holed Azure DevOps endpoint fails the step
+// fast instead of hanging until the agent's job timeout.
+const REQUEST_TIMEOUT_MS = 15000;
 
 interface AzdoThread {
   id: number;
@@ -26,7 +32,6 @@ export class AzdoPlatform implements PrPlatform {
     private readonly token: string,
     private readonly baseRef: string | null,
     workspace: string,
-    private readonly warn: (m: string) => void,
   ) {
     this.workspace = workspace;
   }
@@ -49,7 +54,7 @@ export class AzdoPlatform implements PrPlatform {
     const baseRef = targetBranch ? `origin/${targetBranch.replace(/^refs\/heads\//, '')}` : null;
     const base = collection.endsWith('/') ? collection : `${collection}/`;
     const threadsUrl = `${base}${encodeURIComponent(project)}/_apis/git/repositories/${encodeURIComponent(repoId)}/pullRequests/${prId}/threads`;
-    return new AzdoPlatform(threadsUrl, token ?? '', baseRef, workspace, warn);
+    return new AzdoPlatform(threadsUrl, token ?? '', baseRef, workspace);
   }
 
   getBaseRef(): string | null {
@@ -61,25 +66,28 @@ export class AzdoPlatform implements PrPlatform {
     return diffChangedFiles(this.workspace, this.baseRef).filter((f) => SOURCE_RE.test(f));
   }
 
-  async upsertComment(body: string, marker: string, createIfMissing: boolean): Promise<void> {
-    if (!this.token) return; // already warned in fromEnv
+  async upsertComment(body: string, marker: string, createIfMissing: boolean): Promise<boolean> {
+    if (!this.token) return false; // already warned in fromEnv
+    // findExistingComment throws on a read failure (rather than returning null), so a
+    // transient list error does not masquerade as "no comment" and duplicate-post. A
+    // PATCH/POST failure (e.g. the build identity lacks "Contribute to pull requests")
+    // likewise propagates so the caller reports the post as failed, not succeeded.
     const existing = await this.findExistingComment(marker);
-    try {
-      if (existing) {
-        await this.api(
-          `${this.threadsUrl}/${existing.threadId}/comments/${existing.commentId}?api-version=${API_VERSION}`,
-          'PATCH',
-          { content: body },
-        );
-      } else if (createIfMissing) {
-        await this.api(`${this.threadsUrl}?api-version=${API_VERSION}`, 'POST', {
-          comments: [{ parentCommentId: 0, content: body, commentType: 'text' }],
-          status: 'active',
-        });
-      }
-    } catch (err) {
-      this.warn(`Polder Drift: failed to post Azure DevOps comment: ${(err as Error).message}`);
+    if (existing) {
+      await this.api(
+        `${this.threadsUrl}/${existing.threadId}/comments/${existing.commentId}?api-version=${API_VERSION}`,
+        'PATCH',
+        { content: body },
+      );
+      return true;
+    } else if (createIfMissing) {
+      await this.api(`${this.threadsUrl}?api-version=${API_VERSION}`, 'POST', {
+        comments: [{ parentCommentId: 0, content: body, commentType: 'text' }],
+        status: 'active',
+      });
+      return true;
     }
+    return false;
   }
 
   fail(_message: string): void {
@@ -87,28 +95,59 @@ export class AzdoPlatform implements PrPlatform {
     // fails the pipeline step and (with a required build-validation policy) the PR.
   }
 
+  /**
+   * Find our existing Polder thread by scanning every page of the PR's threads. The
+   * Azure DevOps threads list is not always a single page on a busy PR, so we follow
+   * the `x-ms-continuationtoken` header until exhausted. Returns null only when the
+   * marker is genuinely absent after a full scan; a read failure throws so the caller
+   * does not mistake it for "not found" and post a duplicate.
+   */
   private async findExistingComment(marker: string): Promise<{ threadId: number; commentId: number } | null> {
-    try {
-      const data = (await this.api(`${this.threadsUrl}?api-version=${API_VERSION}`, 'GET')) as {
-        value?: AzdoThread[];
-      };
-      for (const thread of data.value ?? []) {
+    let continuation: string | null = null;
+    // Hard cap on pages so a server that echoes the same token can't loop forever.
+    for (let page = 0; page < MAX_THREAD_PAGES; page++) {
+      const sep = this.threadsUrl.includes('?') ? '&' : '?';
+      const url =
+        `${this.threadsUrl}${sep}api-version=${API_VERSION}` +
+        (continuation ? `&continuationToken=${encodeURIComponent(continuation)}` : '');
+      const { threads, continuationToken } = await this.listThreadsPage(url);
+      for (const thread of threads) {
+        // Our marker lives in the parent comment we author when creating the thread.
         const first = thread.comments?.[0];
         if (first?.content?.includes(marker)) return { threadId: thread.id, commentId: first.id };
       }
-    } catch (err) {
-      this.warn(`Polder Drift: could not list Azure DevOps threads: ${(err as Error).message}`);
+      if (!continuationToken) return null;
+      continuation = continuationToken;
     }
     return null;
   }
 
+  private async listThreadsPage(
+    url: string,
+  ): Promise<{ threads: AzdoThread[]; continuationToken: string | null }> {
+    const res = await this.fetchWithTimeout(url, 'GET');
+    if (!res.ok) throw new Error(`GET ${res.status} ${res.statusText}`);
+    const data = (await res.json()) as { value?: AzdoThread[] };
+    return { threads: data.value ?? [], continuationToken: res.headers.get('x-ms-continuationtoken') };
+  }
+
   private async api(url: string, method: string, body?: unknown): Promise<unknown> {
-    // Bound the request so a slow/black-holed Azure DevOps endpoint fails the step
-    // fast instead of hanging until the agent's job timeout.
+    const res = await this.fetchWithTimeout(url, method, body);
+    if (!res.ok) throw new Error(`${method} ${res.status} ${res.statusText}`);
+    return res.status === 204 ? null : res.json();
+  }
+
+  /**
+   * fetch with bearer auth and a hard REQUEST_TIMEOUT_MS abort, shared by every
+   * Azure DevOps call so the threads-pagination read path gets the same timeout
+   * protection as writes. Returns the raw Response; callers check `.ok` and read
+   * the body or headers (e.g. the `x-ms-continuationtoken`) themselves.
+   */
+  private async fetchWithTimeout(url: string, method: string, body?: unknown): Promise<Response> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 15000);
+    const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     try {
-      const res = await fetch(url, {
+      return await fetch(url, {
         method,
         headers: {
           Authorization: `Bearer ${this.token}`,
@@ -117,8 +156,6 @@ export class AzdoPlatform implements PrPlatform {
         body: body === undefined ? undefined : JSON.stringify(body),
         signal: controller.signal,
       });
-      if (!res.ok) throw new Error(`${method} ${res.status} ${res.statusText}`);
-      return res.status === 204 ? null : res.json();
     } finally {
       clearTimeout(timer);
     }

@@ -35490,6 +35490,8 @@ class GitHubPlatform {
         return data.filter((f) => SOURCE_RE.test(f.filename) && f.status !== 'removed').map((f) => f.filename);
     }
     async upsertComment(body, marker, createIfMissing) {
+        // Octokit throws on a non-2xx response, so read/write failures propagate to the
+        // caller (run-ci) rather than being mistaken for a successful or skipped post.
         const existingId = await this.findExistingComment(marker);
         if (existingId !== null) {
             await this.octokit.rest.issues.updateComment({
@@ -35498,6 +35500,7 @@ class GitHubPlatform {
                 comment_id: existingId,
                 body,
             });
+            return true;
         }
         else if (createIfMissing) {
             await this.octokit.rest.issues.createComment({
@@ -35506,7 +35509,9 @@ class GitHubPlatform {
                 issue_number: this.prNumber,
                 body,
             });
+            return true;
         }
+        return false;
     }
     fail(message) {
         core.setFailed(message);
@@ -35716,13 +35721,25 @@ async function runCi(platform, opts = {}) {
     });
     // Post a new comment only when there is reportable drift; otherwise update an
     // existing comment (to clear a prior alert) but do not create noise on a clean PR.
-    await platform.upsertComment(result.body, render_1.COMMENT_MARKER, result.shouldComment);
+    // Track the true write outcome: a swallowed failure must not be reported as posted.
+    let posted = false;
+    let postError;
+    try {
+        posted = await platform.upsertComment(result.body, render_1.COMMENT_MARKER, result.shouldComment);
+    }
+    catch (err) {
+        postError = err.message;
+        // Surface loudly — otherwise a fail-on-drift run goes red with no comment on the
+        // PR explaining why (e.g. the build identity lacks "Contribute to pull requests").
+        warn(`Polder Drift: failed to post the drift comment — it is NOT on the PR: ${postError}`);
+    }
     const failOnDrift = opts.failOnDriftOverride ?? config.failOnDrift;
     // Only fail on "new" drift when we could actually determine what's new. When the base
     // is unavailable, failing would punish PRs for pre-existing drift, so we never do.
     const failed = failOnDrift && result.baseAvailable && result.newFindings.length > 0;
     if (failed) {
-        platform.fail(`Polder Drift: ${result.newFindings.length} new drift signal(s) introduced by this PR`);
+        platform.fail(`Polder Drift: ${result.newFindings.length} new drift signal(s) introduced by this PR` +
+            (postError ? ` — and the explanatory comment could not be posted (${postError})` : ''));
     }
     else if (failOnDrift && !result.baseAvailable && result.totalFindings > 0) {
         warn('Polder Drift: fail-on-drift skipped because the base ref was unavailable (see above).');
@@ -35732,7 +35749,8 @@ async function runCi(platform, opts = {}) {
         newFindings: result.newFindings.length,
         totalFindings: result.totalFindings,
         adoptionPct: result.adoptionPct,
-        posted: result.shouldComment,
+        posted,
+        postError,
         failed,
     };
 }
