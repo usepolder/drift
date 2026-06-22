@@ -6,7 +6,7 @@
  * transports supply the readers and then post `result.body` when `result.shouldComment`.
  */
 import { checkDriftFull, countCanonicalUsages } from '../parser';
-import { flattenFindings, type Finding } from './findings';
+import { flattenFindings, countDriftedComponents, type Finding } from './findings';
 import { applySuppressions, type SuppressRules } from './suppress';
 import { renderComment, type RenderResult } from './render';
 import { adoptionPct } from './adoption';
@@ -68,29 +68,30 @@ export function analyzePr(p: AnalyzeParams): AnalyzeResult {
   // from the base versions of the changed files.
   let preexistingIds: Set<string> | undefined;
   let adoptionDeltaPct: number | undefined;
+  const driftedComponents = countDriftedComponents(findings);
   if (p.readBase && baseAvailable) {
     preexistingIds = new Set<string>();
     let baseCanonical = 0;
-    let baseDrift = 0;
+    const baseFindings: Finding[] = [];
     for (const file of p.files) {
       const base = p.readBase(file);
       if (base == null) continue;
       const res = checkDriftFull(base, p.dsExports, p.canonicalPkgs, p.allowlist, file);
       // Suppress base findings the same way head findings are (analyze above), so the
       // adoption delta compares like with like and .polderignore doesn't fake a gain.
-      const baseFindings = applySuppressions(flattenFindings(file, res), p.suppress);
-      for (const f of baseFindings) preexistingIds.add(f.id);
-      baseDrift += baseFindings.length;
+      const ff = applySuppressions(flattenFindings(file, res), p.suppress);
+      for (const f of ff) preexistingIds.add(f.id);
+      baseFindings.push(...ff);
       baseCanonical += countCanonicalUsages(base, p.dsExports, p.canonicalPkgs);
     }
-    const baseAdopt = adoptionPct(baseCanonical, baseDrift);
-    const headAdopt = adoptionPct(canonicalUsages, findings.length);
+    const baseAdopt = adoptionPct(baseCanonical, countDriftedComponents(baseFindings));
+    const headAdopt = adoptionPct(canonicalUsages, driftedComponents);
     if (baseAdopt !== undefined && headAdopt !== undefined) {
       adoptionDeltaPct = headAdopt - baseAdopt;
     }
   }
 
-  const adopt = adoptionPct(canonicalUsages, findings.length);
+  const adopt = adoptionPct(canonicalUsages, driftedComponents);
   const render = renderComment(findings, {
     preexistingIds,
     adoptionPct: adopt,

@@ -85,3 +85,26 @@ export function flattenFindings(file: string, result: FullDriftResult): Finding[
   }
   return out;
 }
+
+/**
+ * Collapse findings to the number of DISTINCT DRIFTED COMPONENTS.
+ *
+ * This is the drift counterpart of `countCanonicalUsages` (which counts DS import
+ * specifiers — one per DS component used correctly). The adoption metric divides
+ * the two, so both sides must be counted at the same granularity: per component.
+ *
+ * The subtlety this exists to fix: a single local component that reimplements a DS
+ * component usually trips several inline signals at once (token-fingerprint +
+ * prop-match + sub-component), which would count 3-4× against adoption if we used
+ * the raw finding count. Every inline rule keys on the local component name, so
+ * deduping by `(file, key)` folds those signals back into one component. import-drift
+ * keys on the wrongly-sourced specifier (e.g. `Button from './ui'`), which is already
+ * one drifted DS component per entry — the natural counterpart to one canonical import.
+ */
+export function countDriftedComponents(findings: Finding[]): number {
+  const seen = new Set<string>();
+  // `|` matches the delimiter convention in `findingId`; file paths and component
+  // keys don't contain it, so distinct components never collide.
+  for (const f of findings) seen.add(`${f.file}|${f.key}`);
+  return seen.size;
+}

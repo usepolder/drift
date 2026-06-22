@@ -29,6 +29,28 @@ describe('analyzePr', () => {
     expect(r.body).toContain('-50.0 pts');
   });
 
+  it('a local component that trips several inline signals counts as ONE drifted component', () => {
+    // `ProductCard` reimplements a DS component and trips three inline rules at once:
+    // token-fingerprint (#0f62fe + cds-- class), prop-match (MuiChip prop signature),
+    // and subcomponent (<CardMedia>/<CardContent> without a real <Card>, name "Card").
+    const MULTI =
+      `import { Tile } from '@acme/ds';\n` +
+      `export const ProductCard = ({ label, onDelete, color, size, variant, icon, disabled }) => {\n` +
+      `  return (\n` +
+      `    <div className="cds--tile" style={{ color: '#0f62fe' }}>\n` +
+      `      <CardMedia />\n` +
+      `      <CardContent />\n` +
+      `    </div>\n` +
+      `  );\n` +
+      `};\n`;
+    const r = analyzePr(base({ readCurrent: () => MULTI }));
+    expect(r.totalFindings).toBe(3); // three raw findings on one component
+    // 1 canonical (Tile) vs 1 drifted component => 50%, NOT 1/(1+3)=25% as the old
+    // finding-count metric reported (a single drift would have dominated the headline).
+    expect(Math.round(r.adoptionPct!)).toBe(50);
+    expect(r.body).toContain('Design system adoption: 50%');
+  });
+
   it('stays quiet when the same drift already exists on base', () => {
     const r = analyzePr(base({ readBase: () => HEAD }));
     expect(r.shouldComment).toBe(false);

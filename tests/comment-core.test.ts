@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { flattenFindings, findingId, type Finding } from '../src/comment/findings';
+import { flattenFindings, findingId, countDriftedComponents, type Finding } from '../src/comment/findings';
 import { parseSuppressions, applySuppressions, isSuppressed } from '../src/comment/suppress';
 import { renderComment, COMMENT_MARKER } from '../src/comment/render';
 import type { FullDriftResult } from '../src/parser';
@@ -54,6 +54,38 @@ describe('flattenFindings + stable ids', () => {
     expect(f.find((x) => x.rule === 'import-drift')!.severity).toBe('high');
     expect(f.find((x) => x.rule === 'local-shadow')!.severity).toBe('high');
     expect(f.find((x) => x.rule === 'token-fingerprint')!.severity).toBe('medium');
+  });
+});
+
+describe('countDriftedComponents', () => {
+  it('folds the 3-4 inline signals about one local component into a single component', () => {
+    // One local `Card` trips token-fingerprint + prop-match + subcomponent at once.
+    const f = flattenFindings('src/Card.tsx', result({
+      tokenFingerprints: [{ componentName: 'Card', tokens: ['#161616'], classNames: ['cds--btn'] }],
+      propMatches: [{ componentName: 'Card', matchedDs: 'MuiChip', matchedProps: ['label', 'onDelete'], score: 0.7 }],
+      subComponentMatches: [
+        { componentName: 'Card', matchedDs: 'MuiCard', subComponentsUsed: ['CardMedia'], nameSegment: 'Card', confidence: 'high' },
+      ],
+    }));
+    expect(f).toHaveLength(3);            // three raw findings...
+    expect(countDriftedComponents(f)).toBe(1); // ...but one drifted component
+  });
+
+  it('counts each import-drift specifier as its own drifted component', () => {
+    const f = flattenFindings('src/X.tsx', result({}, ["Button from './ui'", "Tile from './ui'"]));
+    expect(countDriftedComponents(f)).toBe(2);
+  });
+
+  it('is file-scoped: same component name in two files counts twice', () => {
+    const f = [
+      ...flattenFindings('src/A.tsx', result({ localShadows: ['Button'] })),
+      ...flattenFindings('src/B.tsx', result({ localShadows: ['Button'] })),
+    ];
+    expect(countDriftedComponents(f)).toBe(2);
+  });
+
+  it('returns 0 for no findings', () => {
+    expect(countDriftedComponents([])).toBe(0);
   });
 });
 

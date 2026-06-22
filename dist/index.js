@@ -34044,12 +34044,23 @@ function wrappy (fn, cb) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.adoptionPct = adoptionPct;
 /**
- * Adoption ratio: canonical DS usages over total DS-relevant surface
- * (canonical usages + drift signals). Undefined when there is no DS surface at all,
- * so we don't show a misleading "100%" for a file that touches no design system.
+ * Adoption ratio, defined at COMPONENT granularity so the numerator and denominator
+ * compare like with like:
+ *
+ *     canonicalUsages / (canonicalUsages + driftedComponents)
+ *
+ *   - `canonicalUsages`   — DS import specifiers (one per DS component used correctly).
+ *   - `driftedComponents` — distinct drifted components (see `countDriftedComponents`).
+ *
+ * Both count components, not findings. (The old form divided canonical usages by the
+ * raw finding count, but one drifted local component emits 3-4 inline findings, so it
+ * depressed adoption several times harder than one correct import raised it.)
+ *
+ * Undefined when there is no DS surface at all, so we don't show a misleading "100%"
+ * for a file that touches no design system.
  */
-function adoptionPct(canonicalUsages, driftSignals) {
-    const denom = canonicalUsages + driftSignals;
+function adoptionPct(canonicalUsages, driftedComponents) {
+    const denom = canonicalUsages + driftedComponents;
     if (denom === 0)
         return undefined;
     return (canonicalUsages / denom) * 100;
@@ -34104,10 +34115,11 @@ function analyzePr(p) {
     // from the base versions of the changed files.
     let preexistingIds;
     let adoptionDeltaPct;
+    const driftedComponents = (0, findings_1.countDriftedComponents)(findings);
     if (p.readBase && baseAvailable) {
         preexistingIds = new Set();
         let baseCanonical = 0;
-        let baseDrift = 0;
+        const baseFindings = [];
         for (const file of p.files) {
             const base = p.readBase(file);
             if (base == null)
@@ -34115,19 +34127,19 @@ function analyzePr(p) {
             const res = (0, parser_1.checkDriftFull)(base, p.dsExports, p.canonicalPkgs, p.allowlist, file);
             // Suppress base findings the same way head findings are (analyze above), so the
             // adoption delta compares like with like and .polderignore doesn't fake a gain.
-            const baseFindings = (0, suppress_1.applySuppressions)((0, findings_1.flattenFindings)(file, res), p.suppress);
-            for (const f of baseFindings)
+            const ff = (0, suppress_1.applySuppressions)((0, findings_1.flattenFindings)(file, res), p.suppress);
+            for (const f of ff)
                 preexistingIds.add(f.id);
-            baseDrift += baseFindings.length;
+            baseFindings.push(...ff);
             baseCanonical += (0, parser_1.countCanonicalUsages)(base, p.dsExports, p.canonicalPkgs);
         }
-        const baseAdopt = (0, adoption_1.adoptionPct)(baseCanonical, baseDrift);
-        const headAdopt = (0, adoption_1.adoptionPct)(canonicalUsages, findings.length);
+        const baseAdopt = (0, adoption_1.adoptionPct)(baseCanonical, (0, findings_1.countDriftedComponents)(baseFindings));
+        const headAdopt = (0, adoption_1.adoptionPct)(canonicalUsages, driftedComponents);
         if (baseAdopt !== undefined && headAdopt !== undefined) {
             adoptionDeltaPct = headAdopt - baseAdopt;
         }
     }
-    const adopt = (0, adoption_1.adoptionPct)(canonicalUsages, findings.length);
+    const adopt = (0, adoption_1.adoptionPct)(canonicalUsages, driftedComponents);
     const render = (0, render_1.renderComment)(findings, {
         preexistingIds,
         adoptionPct: adopt,
@@ -34151,6 +34163,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.RULE_LABEL = void 0;
 exports.findingId = findingId;
 exports.flattenFindings = flattenFindings;
+exports.countDriftedComponents = countDriftedComponents;
 /**
  * Normalised drift findings shared by every surface (GitHub Action, AzDO, CLI).
  *
@@ -34201,6 +34214,29 @@ function flattenFindings(file, result) {
         push('subcomponent', sm.componentName, `${sm.componentName} ~ ${sm.matchedDs}`, `${sm.confidence}: uses ${sm.subComponentsUsed.join(', ')}`);
     }
     return out;
+}
+/**
+ * Collapse findings to the number of DISTINCT DRIFTED COMPONENTS.
+ *
+ * This is the drift counterpart of `countCanonicalUsages` (which counts DS import
+ * specifiers — one per DS component used correctly). The adoption metric divides
+ * the two, so both sides must be counted at the same granularity: per component.
+ *
+ * The subtlety this exists to fix: a single local component that reimplements a DS
+ * component usually trips several inline signals at once (token-fingerprint +
+ * prop-match + sub-component), which would count 3-4× against adoption if we used
+ * the raw finding count. Every inline rule keys on the local component name, so
+ * deduping by `(file, key)` folds those signals back into one component. import-drift
+ * keys on the wrongly-sourced specifier (e.g. `Button from './ui'`), which is already
+ * one drifted DS component per entry — the natural counterpart to one canonical import.
+ */
+function countDriftedComponents(findings) {
+    const seen = new Set();
+    // `|` matches the delimiter convention in `findingId`; file paths and component
+    // keys don't contain it, so distinct components never collide.
+    for (const f of findings)
+        seen.add(`${f.file}|${f.key}`);
+    return seen.size;
 }
 
 
