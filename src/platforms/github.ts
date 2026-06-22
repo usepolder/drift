@@ -55,7 +55,9 @@ export class GitHubPlatform implements PrPlatform {
     return data.filter((f) => SOURCE_RE.test(f.filename) && f.status !== 'removed').map((f) => f.filename);
   }
 
-  async upsertComment(body: string, marker: string, createIfMissing: boolean): Promise<void> {
+  async upsertComment(body: string, marker: string, createIfMissing: boolean): Promise<boolean> {
+    // Octokit throws on a non-2xx response, so read/write failures propagate to the
+    // caller (run-ci) rather than being mistaken for a successful or skipped post.
     const existingId = await this.findExistingComment(marker);
     if (existingId !== null) {
       await this.octokit.rest.issues.updateComment({
@@ -64,6 +66,7 @@ export class GitHubPlatform implements PrPlatform {
         comment_id: existingId,
         body,
       });
+      return true;
     } else if (createIfMissing) {
       await this.octokit.rest.issues.createComment({
         owner: this.owner,
@@ -71,7 +74,9 @@ export class GitHubPlatform implements PrPlatform {
         issue_number: this.prNumber,
         body,
       });
+      return true;
     }
+    return false;
   }
 
   fail(message: string): void {

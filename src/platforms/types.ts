@@ -20,8 +20,14 @@ export interface PrPlatform {
    * Create or update the single Polder Drift comment, identified by `marker`.
    * When `createIfMissing` is false, only an existing comment is updated (used to
    * clear a prior alert when a PR is now healthy, without posting a fresh comment).
+   *
+   * Returns `true` when a comment was actually created or updated, `false` when the
+   * write was intentionally skipped (nothing to do, or no credentials). A real write
+   * or read failure MUST throw — never swallow it and report success, or the caller
+   * will claim it posted when it did not. A read failure must also throw rather than
+   * be treated as "no existing comment", which would duplicate the comment next run.
    */
-  upsertComment(body: string, marker: string, createIfMissing: boolean): Promise<void>;
+  upsertComment(body: string, marker: string, createIfMissing: boolean): Promise<boolean>;
 
   /** Mark the run failed (failed check / nonzero exit) when fail-on-drift is set. */
   fail(message: string): void;

@@ -5845,18 +5845,22 @@ exports.AzdoPlatform = void 0;
 const git_1 = __nccwpck_require__(160);
 const SOURCE_RE = /\.(ts|tsx|js|jsx)$/;
 const API_VERSION = '7.1-preview.1';
+// Upper bound on threads pages we follow via continuation token, so a misbehaving
+// server can't loop us forever. Even very busy PRs hold far fewer than this.
+const MAX_THREAD_PAGES = 50;
+// Hard cap per request so a slow/black-holed Azure DevOps endpoint fails the step
+// fast instead of hanging until the agent's job timeout.
+const REQUEST_TIMEOUT_MS = 15000;
 class AzdoPlatform {
     threadsUrl;
     token;
     baseRef;
-    warn;
     name = 'azdo';
     workspace;
-    constructor(threadsUrl, token, baseRef, workspace, warn) {
+    constructor(threadsUrl, token, baseRef, workspace) {
         this.threadsUrl = threadsUrl;
         this.token = token;
         this.baseRef = baseRef;
-        this.warn = warn;
         this.workspace = workspace;
     }
     static fromEnv(env = process.env, warn = (m) => process.stderr.write(m + '\n')) {
@@ -5875,7 +5879,7 @@ class AzdoPlatform {
         const baseRef = targetBranch ? `origin/${targetBranch.replace(/^refs\/heads\//, '')}` : null;
         const base = collection.endsWith('/') ? collection : `${collection}/`;
         const threadsUrl = `${base}${encodeURIComponent(project)}/_apis/git/repositories/${encodeURIComponent(repoId)}/pullRequests/${prId}/threads`;
-        return new AzdoPlatform(threadsUrl, token ?? '', baseRef, workspace, warn);
+        return new AzdoPlatform(threadsUrl, token ?? '', baseRef, workspace);
     }
     getBaseRef() {
         return this.baseRef;
@@ -5887,48 +5891,80 @@ class AzdoPlatform {
     }
     async upsertComment(body, marker, createIfMissing) {
         if (!this.token)
-            return; // already warned in fromEnv
+            return false; // already warned in fromEnv
+        // findExistingComment throws on a read failure (rather than returning null), so a
+        // transient list error does not masquerade as "no comment" and duplicate-post. A
+        // PATCH/POST failure (e.g. the build identity lacks "Contribute to pull requests")
+        // likewise propagates so the caller reports the post as failed, not succeeded.
         const existing = await this.findExistingComment(marker);
-        try {
-            if (existing) {
-                await this.api(`${this.threadsUrl}/${existing.threadId}/comments/${existing.commentId}?api-version=${API_VERSION}`, 'PATCH', { content: body });
-            }
-            else if (createIfMissing) {
-                await this.api(`${this.threadsUrl}?api-version=${API_VERSION}`, 'POST', {
-                    comments: [{ parentCommentId: 0, content: body, commentType: 'text' }],
-                    status: 'active',
-                });
-            }
+        if (existing) {
+            await this.api(`${this.threadsUrl}/${existing.threadId}/comments/${existing.commentId}?api-version=${API_VERSION}`, 'PATCH', { content: body });
+            return true;
         }
-        catch (err) {
-            this.warn(`Polder Drift: failed to post Azure DevOps comment: ${err.message}`);
+        else if (createIfMissing) {
+            await this.api(`${this.threadsUrl}?api-version=${API_VERSION}`, 'POST', {
+                comments: [{ parentCommentId: 0, content: body, commentType: 'text' }],
+                status: 'active',
+            });
+            return true;
         }
+        return false;
     }
     fail(_message) {
         // No-op: the `ci` command sets the process exit code from the run result, which
         // fails the pipeline step and (with a required build-validation policy) the PR.
     }
+    /**
+     * Find our existing Polder thread by scanning every page of the PR's threads. The
+     * Azure DevOps threads list is not always a single page on a busy PR, so we follow
+     * the `x-ms-continuationtoken` header until exhausted. Returns null only when the
+     * marker is genuinely absent after a full scan; a read failure throws so the caller
+     * does not mistake it for "not found" and post a duplicate.
+     */
     async findExistingComment(marker) {
-        try {
-            const data = (await this.api(`${this.threadsUrl}?api-version=${API_VERSION}`, 'GET'));
-            for (const thread of data.value ?? []) {
+        let continuation = null;
+        // Hard cap on pages so a server that echoes the same token can't loop forever.
+        for (let page = 0; page < MAX_THREAD_PAGES; page++) {
+            const sep = this.threadsUrl.includes('?') ? '&' : '?';
+            const url = `${this.threadsUrl}${sep}api-version=${API_VERSION}` +
+                (continuation ? `&continuationToken=${encodeURIComponent(continuation)}` : '');
+            const { threads, continuationToken } = await this.listThreadsPage(url);
+            for (const thread of threads) {
+                // Our marker lives in the parent comment we author when creating the thread.
                 const first = thread.comments?.[0];
                 if (first?.content?.includes(marker))
                     return { threadId: thread.id, commentId: first.id };
             }
-        }
-        catch (err) {
-            this.warn(`Polder Drift: could not list Azure DevOps threads: ${err.message}`);
+            if (!continuationToken)
+                return null;
+            continuation = continuationToken;
         }
         return null;
     }
+    async listThreadsPage(url) {
+        const res = await this.fetchWithTimeout(url, 'GET');
+        if (!res.ok)
+            throw new Error(`GET ${res.status} ${res.statusText}`);
+        const data = (await res.json());
+        return { threads: data.value ?? [], continuationToken: res.headers.get('x-ms-continuationtoken') };
+    }
     async api(url, method, body) {
-        // Bound the request so a slow/black-holed Azure DevOps endpoint fails the step
-        // fast instead of hanging until the agent's job timeout.
+        const res = await this.fetchWithTimeout(url, method, body);
+        if (!res.ok)
+            throw new Error(`${method} ${res.status} ${res.statusText}`);
+        return res.status === 204 ? null : res.json();
+    }
+    /**
+     * fetch with bearer auth and a hard REQUEST_TIMEOUT_MS abort, shared by every
+     * Azure DevOps call so the threads-pagination read path gets the same timeout
+     * protection as writes. Returns the raw Response; callers check `.ok` and read
+     * the body or headers (e.g. the `x-ms-continuationtoken`) themselves.
+     */
+    async fetchWithTimeout(url, method, body) {
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 15000);
+        const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
         try {
-            const res = await fetch(url, {
+            return await fetch(url, {
                 method,
                 headers: {
                     Authorization: `Bearer ${this.token}`,
@@ -5937,9 +5973,6 @@ class AzdoPlatform {
                 body: body === undefined ? undefined : JSON.stringify(body),
                 signal: controller.signal,
             });
-            if (!res.ok)
-                throw new Error(`${method} ${res.status} ${res.statusText}`);
-            return res.status === 204 ? null : res.json();
         }
         finally {
             clearTimeout(timer);
@@ -6214,13 +6247,25 @@ async function runCi(platform, opts = {}) {
     });
     // Post a new comment only when there is reportable drift; otherwise update an
     // existing comment (to clear a prior alert) but do not create noise on a clean PR.
-    await platform.upsertComment(result.body, render_1.COMMENT_MARKER, result.shouldComment);
+    // Track the true write outcome: a swallowed failure must not be reported as posted.
+    let posted = false;
+    let postError;
+    try {
+        posted = await platform.upsertComment(result.body, render_1.COMMENT_MARKER, result.shouldComment);
+    }
+    catch (err) {
+        postError = err.message;
+        // Surface loudly — otherwise a fail-on-drift run goes red with no comment on the
+        // PR explaining why (e.g. the build identity lacks "Contribute to pull requests").
+        warn(`Polder Drift: failed to post the drift comment — it is NOT on the PR: ${postError}`);
+    }
     const failOnDrift = opts.failOnDriftOverride ?? config.failOnDrift;
     // Only fail on "new" drift when we could actually determine what's new. When the base
     // is unavailable, failing would punish PRs for pre-existing drift, so we never do.
     const failed = failOnDrift && result.baseAvailable && result.newFindings.length > 0;
     if (failed) {
-        platform.fail(`Polder Drift: ${result.newFindings.length} new drift signal(s) introduced by this PR`);
+        platform.fail(`Polder Drift: ${result.newFindings.length} new drift signal(s) introduced by this PR` +
+            (postError ? ` — and the explanatory comment could not be posted (${postError})` : ''));
     }
     else if (failOnDrift && !result.baseAvailable && result.totalFindings > 0) {
         warn('Polder Drift: fail-on-drift skipped because the base ref was unavailable (see above).');
@@ -6230,7 +6275,8 @@ async function runCi(platform, opts = {}) {
         newFindings: result.newFindings.length,
         totalFindings: result.totalFindings,
         adoptionPct: result.adoptionPct,
-        posted: result.shouldComment,
+        posted,
+        postError,
         failed,
     };
 }
