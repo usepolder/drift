@@ -34361,7 +34361,6 @@ exports.applySuppressions = applySuppressions;
 const fs = __importStar(__nccwpck_require__(9896));
 const path = __importStar(__nccwpck_require__(6928));
 const ID_RE = /^[0-9a-f]{12}$/;
-const REGEX_SPECIAL = /[.+^${}()|[\]\\]/;
 function parseSuppressions(content) {
     const ids = new Set();
     const rules = new Set();
@@ -34389,32 +34388,33 @@ function loadSuppressions(cwd) {
         return { ids: new Set(), rules: new Set(), globs: [] };
     }
 }
-/**
- * Translate a path glob to an anchored RegExp. Single pass, no sentinel:
- * `**` -> `.*` (crosses directories), `*` -> `[^/]*` (within one segment),
- * every regex special is escaped.
- */
+// Sentinels for tokenising the glob before escaping regex specials. Control
+// chars can't appear in a path glob and survive the escape pass untouched, so
+// each `*`/`**` variant is translated exactly once with no collisions.
+const TOK_DOUBLESTAR_SLASH = '\x00'; // leading or embedded `**/`
+const TOK_SLASH_DOUBLESTAR = '\x01'; // trailing `/**`
+const TOK_DOUBLESTAR = '\x02'; // bare `**`
+const TOK_STAR = '\x03'; // single `*`
 function globToRegExp(glob) {
-    let out = '';
-    for (let i = 0; i < glob.length; i++) {
-        const c = glob[i];
-        if (c === '*') {
-            if (glob[i + 1] === '*') {
-                out += '.*';
-                i++; // consume the second star
-            }
-            else {
-                out += '[^/]*';
-            }
-        }
-        else if (REGEX_SPECIAL.test(c)) {
-            out += '\\' + c;
-        }
-        else {
-            out += c;
-        }
-    }
-    return new RegExp(`^${out}$`);
+    // Translate a gitignore-style path glob into an anchored RegExp.
+    //   `**/`  (leading or embedded) -> zero or more path segments, so
+    //          `**/Button.tsx` matches `Button.tsx` AND `a/b/Button.tsx`.
+    //   `/**`  (trailing)            -> the directory itself plus everything
+    //          under it, so `src/**` matches `src` AND `src/a.tsx`.
+    //   `**`   (bare)                -> any run of characters across `/`.
+    //   `*`                          -> any run of characters within one segment.
+    const tokenised = glob
+        .replace(/\/\*\*$/g, TOK_SLASH_DOUBLESTAR)
+        .replace(/(^|\/)\*\*\//g, (_m, lead) => lead + TOK_DOUBLESTAR_SLASH)
+        .replace(/\*\*/g, TOK_DOUBLESTAR)
+        .replace(/\*/g, TOK_STAR);
+    const body = tokenised
+        .replace(/[.+^${}()|[\]\\]/g, '\\$&')
+        .replace(new RegExp(TOK_DOUBLESTAR_SLASH, 'g'), '(?:.*/)?')
+        .replace(new RegExp(TOK_SLASH_DOUBLESTAR, 'g'), '(?:/.*)?')
+        .replace(new RegExp(TOK_DOUBLESTAR, 'g'), '.*')
+        .replace(new RegExp(TOK_STAR, 'g'), '[^/]*');
+    return new RegExp(`^${body}$`);
 }
 function isSuppressed(f, s) {
     if (s.ids.has(f.id))

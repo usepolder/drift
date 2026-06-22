@@ -79,6 +79,42 @@ describe('suppression', () => {
     expect(isSuppressed(findings[0], parseSuppressions('src/legacy/**'))).toBe(false);
   });
 
+  const at = (file: string): Finding => ({
+    id: 'cccccccccccc', file, rule: 'local-shadow', key: 'Button', title: 'Button', detail: '', severity: 'high',
+  });
+
+  it('leading **/ matches a top-level file and any nested depth', () => {
+    const s = parseSuppressions('path:**/Button.tsx');
+    expect(isSuppressed(at('Button.tsx'), s)).toBe(true); // top-level, no slash
+    expect(isSuppressed(at('a/Button.tsx'), s)).toBe(true); // one dir deep
+    expect(isSuppressed(at('a/b/Button.tsx'), s)).toBe(true); // many dirs deep
+    expect(isSuppressed(at('a/Card.tsx'), s)).toBe(false); // different file
+    expect(isSuppressed(at('a/NotButton.tsx'), s)).toBe(false); // * stays within a segment
+  });
+
+  it('trailing /** matches the directory itself and everything under it', () => {
+    const s = parseSuppressions('src/**');
+    expect(isSuppressed(at('src'), s)).toBe(true); // the directory itself
+    expect(isSuppressed(at('src/a.tsx'), s)).toBe(true); // a file under it
+    expect(isSuppressed(at('src/legacy/b.tsx'), s)).toBe(true); // nested under it
+    expect(isSuppressed(at('source/a.tsx'), s)).toBe(false); // not a prefix-name match
+    expect(isSuppressed(at('lib/a.tsx'), s)).toBe(false); // unrelated dir
+  });
+
+  it('embedded **/ collapses to zero or more middle segments', () => {
+    const s = parseSuppressions('path:src/**/Button.tsx');
+    expect(isSuppressed(at('src/Button.tsx'), s)).toBe(true); // zero middle dirs
+    expect(isSuppressed(at('src/ui/Button.tsx'), s)).toBe(true); // one middle dir
+    expect(isSuppressed(at('src/ui/forms/Button.tsx'), s)).toBe(true); // several middle dirs
+    expect(isSuppressed(at('lib/Button.tsx'), s)).toBe(false); // wrong root
+  });
+
+  it('single * stays within one path segment', () => {
+    const s = parseSuppressions('path:src/*.tsx');
+    expect(isSuppressed(at('src/Button.tsx'), s)).toBe(true);
+    expect(isSuppressed(at('src/legacy/Button.tsx'), s)).toBe(false); // * does not cross /
+  });
+
   it('ignores comments and blank lines', () => {
     const s = parseSuppressions('# a comment\n\n   \nrule:token-fingerprint\n');
     expect(s.rules.has('token-fingerprint')).toBe(true);
