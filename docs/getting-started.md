@@ -186,6 +186,7 @@ jobs:
       pull-requests: write   # required: the Action posts a PR comment
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # full history — needed to report only the drift this PR introduces
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - run: npm ci
@@ -194,6 +195,10 @@ jobs:
 
 The `pull-requests: write` line matters: the default `GITHUB_TOKEN` is read-only, so
 without it the comment never appears. (Fork PRs are always read-only regardless.)
+
+The `fetch-depth: 0` matters too: a shallow checkout has no base branch to diff against,
+so the Action can't isolate new drift and reports **all** of it instead. Full history
+gives you the "introduced by this PR" view.
 
 On Azure DevOps, run `polder-drift ci` as a pipeline step — same comment, no extension.
 See [Polder Drift on Azure DevOps](azure-pipelines.md).
