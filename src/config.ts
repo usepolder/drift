@@ -5,6 +5,12 @@ export interface PolderConfig extends CustomDetection {
   componentLibrary: string[];
   allowlist: string[];
   failOnDrift: boolean;
+  /**
+   * Where to resolve a package's exports when it isn't installed with usable types:
+   * package name → directory (relative to the repo root), e.g. a checkout of the
+   * design-system repo. See resolveDsSurface in parser.ts for the fallback chain.
+   */
+  libraryPaths?: Record<string, string>;
   // Custom detection data (all optional, from CustomDetection):
   //   tokens          — hex value → token label, powers token-fingerprint
   //   classPrefixes   — DS class-name prefixes, powers token-fingerprint
@@ -17,6 +23,7 @@ interface RawConfig {
   component_library?: string | string[];
   allowlist?: string[];
   fail_on_drift?: boolean;
+  library_paths?: Record<string, unknown>;
   tokens?: Record<string, unknown>;
   class_prefixes?: unknown[];
   prop_signatures?: Record<string, unknown>;
@@ -76,6 +83,18 @@ export function parseConfig(raw: string): PolderConfig {
     allowlist: Array.isArray(cfg.allowlist) ? cfg.allowlist.filter((x) => typeof x === 'string') : [],
     failOnDrift: cfg.fail_on_drift === true,
   };
+
+  if (cfg.library_paths !== undefined) {
+    const paths = requireStringMap(cfg.library_paths, 'library_paths');
+    // A path for a package that isn't canonical would never be consulted — that's
+    // almost certainly a typo'd package name, so fail loudly.
+    for (const pkg of Object.keys(paths)) {
+      if (!componentLibrary.includes(pkg)) {
+        throw new Error(`library_paths contains "${pkg}" which is not in component_library`);
+      }
+    }
+    config.libraryPaths = paths;
+  }
 
   // Custom detection data. Malformed entries throw (rather than being dropped) —
   // a silently-ignored typo here would look like the rule simply not working.

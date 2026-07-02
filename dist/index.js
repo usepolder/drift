@@ -34562,6 +34562,17 @@ function parseConfig(raw) {
         allowlist: Array.isArray(cfg.allowlist) ? cfg.allowlist.filter((x) => typeof x === 'string') : [],
         failOnDrift: cfg.fail_on_drift === true,
     };
+    if (cfg.library_paths !== undefined) {
+        const paths = requireStringMap(cfg.library_paths, 'library_paths');
+        // A path for a package that isn't canonical would never be consulted — that's
+        // almost certainly a typo'd package name, so fail loudly.
+        for (const pkg of Object.keys(paths)) {
+            if (!componentLibrary.includes(pkg)) {
+                throw new Error(`library_paths contains "${pkg}" which is not in component_library`);
+            }
+        }
+        config.libraryPaths = paths;
+    }
     // Custom detection data. Malformed entries throw (rather than being dropped) —
     // a silently-ignored typo here would look like the rule simply not working.
     if (cfg.tokens !== undefined) {
@@ -34813,6 +34824,9 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.DS_PROP_SIGNATURES = exports.DS_NAME_SEGMENTS = exports.DS_SUBCOMPONENT_MAP = exports.MUI_TOKENS = exports.CARBON_TOKENS = void 0;
 exports.resolveExports = resolveExports;
+exports.resolveDtsExports = resolveDtsExports;
+exports.resolveSourceExports = resolveSourceExports;
+exports.resolveDsSurface = resolveDsSurface;
 exports.isComponentFile = isComponentFile;
 exports.checkDrift = checkDrift;
 exports.countCanonicalUsages = countCanonicalUsages;
@@ -34871,16 +34885,20 @@ function resolveFile(filePath) {
     return null;
 }
 function resolveExports(pkgName, nodeModulesDir) {
+    return resolveDtsExports(path.join(nodeModulesDir, pkgName));
+}
+/** Exports read from a package directory's .d.ts files (types entry or per-file). */
+function resolveDtsExports(pkgDir) {
     const names = new Set();
     try {
-        const pkgJsonPath = path.join(nodeModulesDir, pkgName, 'package.json');
+        const pkgJsonPath = path.join(pkgDir, 'package.json');
         const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
         // When the package has no types entry but ships one .d.ts per export (e.g.
         // @carbon/icons-react), collect names from .d.ts filenames in the lib/ dir.
         if (!pkgJson.types && !pkgJson.typings) {
             const candidates = ['lib', 'es', 'dist', '.'];
             for (const dir of candidates) {
-                const dirPath = path.join(nodeModulesDir, pkgName, dir);
+                const dirPath = path.join(pkgDir, dir);
                 try {
                     for (const f of fs.readdirSync(dirPath)) {
                         if (f.endsWith('.d.ts') && f !== 'index.d.ts') {
@@ -34895,8 +34913,7 @@ function resolveExports(pkgName, nodeModulesDir) {
             return names;
         }
         const typesEntry = pkgJson.types ?? pkgJson.typings ?? 'index.d.ts';
-        const rootDtsPath = path.join(nodeModulesDir, pkgName, typesEntry);
-        const rootDir = path.dirname(rootDtsPath);
+        const rootDtsPath = path.join(pkgDir, typesEntry);
         // BFS over export * chains — queue holds absolute paths already resolved to .d.ts
         const visited = new Set();
         const queue = [rootDtsPath];
@@ -34922,9 +34939,151 @@ function resolveExports(pkgName, nodeModulesDir) {
         }
     }
     catch {
-        // node_modules not present or .d.ts missing/malformed — caller handles warning
+        // package dir not present or .d.ts missing/malformed — caller handles warning
     }
     return names;
+}
+// ── Source-based export resolution (bring-your-own design system) ─────────────
+//
+// In-house design systems are often source-only: a monorepo workspace package or a
+// sibling repo checkout shipping raw .ts/.tsx with no built .d.ts. For those, walk
+// the source barrel with the Babel parser — same BFS shape as the .d.ts walker.
+// Conventional barrel locations, tried when package.json has no usable source entry.
+const SOURCE_ENTRY_CANDIDATES = [
+    'src/index.ts', 'src/index.tsx', 'index.ts', 'index.tsx',
+    'src/index.js', 'src/index.jsx', 'index.js', 'index.jsx',
+];
+const SOURCE_FILE_RE = /\.(ts|tsx|js|jsx)$/;
+// Safety valve for pathological export-star webs; a DS surface fits well within this.
+const MAX_SOURCE_FILES = 2000;
+function isFile(p) {
+    try {
+        return fs.statSync(p).isFile();
+    }
+    catch {
+        return false;
+    }
+}
+function resolveSourceEntry(pkgDir) {
+    try {
+        const pkgJson = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8'));
+        for (const entry of [pkgJson.source, pkgJson.module, pkgJson.main]) {
+            if (entry && SOURCE_FILE_RE.test(entry) && isFile(path.join(pkgDir, entry))) {
+                return path.join(pkgDir, entry);
+            }
+        }
+    }
+    catch { /* no package.json — a bare source checkout is fine, try conventions */ }
+    for (const rel of SOURCE_ENTRY_CANDIDATES) {
+        if (isFile(path.join(pkgDir, rel)))
+            return path.join(pkgDir, rel);
+    }
+    return null;
+}
+/** Node-ish resolution of a relative `from './x'` specifier to a source file. */
+function resolveSourceModule(fromFile, specifier) {
+    const base = path.resolve(path.dirname(fromFile), specifier);
+    const candidates = [
+        base, `${base}.ts`, `${base}.tsx`, `${base}.js`, `${base}.jsx`,
+        path.join(base, 'index.ts'), path.join(base, 'index.tsx'),
+        path.join(base, 'index.js'), path.join(base, 'index.jsx'),
+    ];
+    for (const c of candidates) {
+        if (isFile(c))
+            return c;
+    }
+    return null;
+}
+/**
+ * Exports read from a package's SOURCE files: find the barrel (package.json
+ * source/module/main pointing at .ts/.tsx, else src/index.ts and friends) and walk
+ * `export` statements, following relative `export * from` chains.
+ */
+function resolveSourceExports(pkgDir) {
+    const names = new Set();
+    const entry = resolveSourceEntry(pkgDir);
+    if (!entry)
+        return names;
+    const visited = new Set();
+    const queue = [entry];
+    while (queue.length > 0 && visited.size < MAX_SOURCE_FILES) {
+        const current = queue.shift();
+        if (visited.has(current))
+            continue;
+        visited.add(current);
+        let content;
+        try {
+            content = fs.readFileSync(current, 'utf8');
+        }
+        catch {
+            continue;
+        }
+        const ast = parseSource(content);
+        if (!ast)
+            continue;
+        for (const node of ast.program.body) {
+            if (node.type === 'ExportNamedDeclaration') {
+                const d = node.declaration;
+                if (d) {
+                    if ((d.type === 'FunctionDeclaration' || d.type === 'ClassDeclaration' ||
+                        d.type === 'TSInterfaceDeclaration' || d.type === 'TSTypeAliasDeclaration' ||
+                        d.type === 'TSEnumDeclaration') && d.id) {
+                        names.add(d.id.name);
+                    }
+                    else if (d.type === 'VariableDeclaration') {
+                        for (const decl of d.declarations) {
+                            if (decl.id.type === 'Identifier')
+                                names.add(decl.id.name);
+                        }
+                    }
+                }
+                for (const spec of node.specifiers) {
+                    if (spec.type === 'ExportSpecifier') {
+                        const exported = spec.exported.type === 'Identifier' ? spec.exported.name : spec.exported.value;
+                        if (exported !== 'default')
+                            names.add(exported);
+                    }
+                    else if (spec.type === 'ExportNamespaceSpecifier' && spec.exported.type === 'Identifier') {
+                        // `export * as Tokens from './tokens'` — the namespace itself is the export
+                        names.add(spec.exported.name);
+                    }
+                }
+            }
+            else if (node.type === 'ExportAllDeclaration' && node.source.value.startsWith('.')) {
+                const resolved = resolveSourceModule(current, node.source.value);
+                if (resolved)
+                    queue.push(resolved);
+            }
+        }
+    }
+    return names;
+}
+/**
+ * Full resolution chain for one configured DS package — this is what makes the tool
+ * work against ANY design system, not just published ones with built types:
+ *
+ *   1. node_modules .d.ts        — installed package with type declarations
+ *   2. library_paths dir, .d.ts  — a local checkout of the DS repo that ships types
+ *   3. library_paths dir, source — a source-only DS repo checkout
+ *   4. node_modules source       — a monorepo workspace package without built types
+ *
+ * Empty result means nothing resolved anywhere; callers warn and fall back to the
+ * PascalCase heuristic.
+ */
+function resolveDsSurface(pkg, cwd, libraryPath) {
+    const installedDir = path.join(cwd, 'node_modules', pkg);
+    let names = resolveDtsExports(installedDir);
+    if (names.size > 0)
+        return names;
+    if (libraryPath) {
+        const dir = path.resolve(cwd, libraryPath);
+        names = resolveDtsExports(dir);
+        if (names.size === 0)
+            names = resolveSourceExports(dir);
+        if (names.size > 0)
+            return names;
+    }
+    return resolveSourceExports(installedDir);
 }
 function isComponentFile(content) {
     if (/<[A-Z][a-zA-Z]*[\s/>]/.test(content))
@@ -35932,12 +36091,14 @@ const suppress_1 = __nccwpck_require__(10);
 const render_1 = __nccwpck_require__(5665);
 const git_1 = __nccwpck_require__(9160);
 function resolveDsExports(config, workspace, warn) {
-    const nodeModules = path.join(workspace, 'node_modules');
     const dsExports = new Set();
     for (const pkg of config.componentLibrary) {
-        const ex = (0, parser_1.resolveExports)(pkg, nodeModules);
+        const libraryPath = config.libraryPaths?.[pkg];
+        const ex = (0, parser_1.resolveDsSurface)(pkg, workspace, libraryPath);
         if (ex.size === 0) {
-            warn(`Polder Drift: could not resolve exports for "${pkg}" from node_modules; run install before this step. Falling back to PascalCase heuristic.`);
+            const tried = libraryPath ? `node_modules or ${libraryPath}` : 'node_modules';
+            warn(`Polder Drift: could not resolve exports for "${pkg}" from ${tried}; run install before this step, ` +
+                `or point library_paths."${pkg}" at a checkout of the package's repo. Falling back to PascalCase heuristic.`);
         }
         for (const n of ex)
             dsExports.add(n);

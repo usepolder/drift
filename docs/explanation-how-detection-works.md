@@ -122,9 +122,11 @@ Every one of those choices gives something up. Named honestly:
   keys. Without either, a repo gets the import-drift and local-shadow rules (which are
   library-agnostic) but not the heuristic look-alike rules. This is a deliberate
   precision-over-recall trade: better to miss some drift than to flood the comment.
-- **The heuristic fallback is blunt.** Without `node_modules`, import drift degrades to
-  "flag any PascalCase local import" and local-shadow turns off entirely. Installing
-  dependencies before a run restores exact matching.
+- **The heuristic fallback is blunt.** When the DS exports can't be resolved at all,
+  import drift degrades to "flag any PascalCase local import" and local-shadow turns
+  off entirely. Installing dependencies restores exact matching, and for source-only
+  or unpublished design systems the resolver also reads TS/JS source — from the
+  workspace package or from a repo checkout named in `library_paths`.
 - **Export resolution is regex-based.** `.d.ts` parsing uses regular expressions over
   `export` statements and `export *` re-export chains rather than a full TypeScript
   type checker — fast and dependency-light, but it can miss exotic re-export shapes.

@@ -8,7 +8,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { type PolderConfig } from './config';
 import { resolveConfig } from './resolve-config';
-import { resolveExports } from './parser';
+import { resolveDsSurface } from './parser';
 import { buildDetectionProfile } from './profiles';
 import { analyzePr } from './comment/analyze';
 import { loadSuppressions } from './comment/suppress';
@@ -29,12 +29,16 @@ export interface RunCiResult {
 }
 
 function resolveDsExports(config: PolderConfig, workspace: string, warn: (m: string) => void): Set<string> {
-  const nodeModules = path.join(workspace, 'node_modules');
   const dsExports = new Set<string>();
   for (const pkg of config.componentLibrary) {
-    const ex = resolveExports(pkg, nodeModules);
+    const libraryPath = config.libraryPaths?.[pkg];
+    const ex = resolveDsSurface(pkg, workspace, libraryPath);
     if (ex.size === 0) {
-      warn(`Polder Drift: could not resolve exports for "${pkg}" from node_modules; run install before this step. Falling back to PascalCase heuristic.`);
+      const tried = libraryPath ? `node_modules or ${libraryPath}` : 'node_modules';
+      warn(
+        `Polder Drift: could not resolve exports for "${pkg}" from ${tried}; run install before this step, ` +
+          `or point library_paths."${pkg}" at a checkout of the package's repo. Falling back to PascalCase heuristic.`,
+      );
     }
     for (const n of ex) dsExports.add(n);
   }

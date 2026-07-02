@@ -15,6 +15,7 @@ detection live in [`src/resolve-config.ts`](../src/resolve-config.ts) and
 component_library: "@your-org/design-system"   # string or list — REQUIRED
 allowlist: []                                   # import-source prefixes to ignore
 fail_on_drift: false                            # fail the check / exit non-zero on drift
+library_paths: {}                               # package → local dir (e.g. a DS repo checkout)
 
 # Custom detection data (all optional) — powers the inline rules for design
 # systems without built-in profiles. See "Detection profiles" below.
@@ -44,13 +45,60 @@ component_library:
   - "@mui/material"
 ```
 
-**Export resolution.** At run time the package's exports are read from
-`node_modules/<pkg>` — from the `types`/`typings` `.d.ts` entry (following
-`export * from …` chains), or, for packages that ship one `.d.ts` per export
-(e.g. `@carbon/icons-react`), from the `.d.ts` filenames in `lib/`, `es/`, or `dist/`.
-**Run your install step before any run** so resolution succeeds. If a package can't be
-resolved, the engine warns on stderr and falls back to a PascalCase heuristic, which is
-broader and noisier and disables the `local-shadow` rule.
+**Export resolution.** At run time each package's exports are resolved through a
+fallback chain (`resolveDsSurface` in [parser.ts](../src/parser.ts)):
+
+1. **`node_modules/<pkg>` `.d.ts`** — the `types`/`typings` entry (following
+   `export * from …` chains), or, for packages that ship one `.d.ts` per export
+   (e.g. `@carbon/icons-react`), the `.d.ts` filenames in `lib/`, `es/`, or `dist/`.
+2. **`library_paths` directory, `.d.ts`** — a local checkout of the DS repo that
+   ships built types.
+3. **`library_paths` directory, source** — the checkout's TypeScript/JS source: the
+   barrel (`package.json` `source`/`module`/`main` pointing at `.ts`/`.tsx`, else
+   `src/index.ts` and friends) is parsed and its `export` statements walked,
+   following relative `export * from` chains.
+4. **`node_modules/<pkg>` source** — a monorepo workspace package installed without
+   built type declarations.
+
+**Run your install step before any run** so steps 1/4 can see the package. If nothing
+resolves anywhere, the engine warns on stderr and falls back to a PascalCase
+heuristic, which is broader and noisier and disables the `local-shadow` rule.
+
+### `library_paths` (optional, default `{}`)
+
+A mapping of package name → directory (relative to the repo root) used when the
+package can't be resolved from `node_modules` — typically a checkout of your
+design-system repo. Every key must also appear in `component_library` (a path for a
+non-canonical package is a config error, almost always a typo).
+
+```yaml
+component_library: "@your-org/design-system"
+library_paths:
+  "@your-org/design-system": ".polder/design-system"
+```
+
+This is how the tool works against **any in-house design system**, including one that
+lives in a separate repo and is never published: in CI, check the DS repo out next to
+the app and point `library_paths` at it. On GitHub:
+
+```yaml
+steps:
+  - uses: actions/checkout@v4
+    with: { fetch-depth: 0 }
+  - uses: actions/checkout@v4
+    with:
+      repository: your-org/design-system
+      path: .polder/design-system
+      token: ${{ secrets.DS_REPO_TOKEN }}   # only needed for a private DS repo
+  - uses: actions/setup-node@v4
+    with: { node-version: 20 }
+  - run: npm ci
+  - uses: usepolder/drift@v1
+```
+
+The engine only ever reads the local directory — it never fetches the repo itself, so
+credentials stay in the checkout step where they belong. Locally, point the path at
+your sibling checkout (e.g. `../design-system`).
 
 ### `allowlist` (optional, default `[]`)
 

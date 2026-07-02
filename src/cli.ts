@@ -4,7 +4,7 @@ import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { type PolderConfig } from './config';
 import { resolveConfig, type ResolvedConfig } from './resolve-config';
-import { resolveExports, checkDriftFull, type FullDriftResult } from './parser';
+import { resolveDsSurface, checkDriftFull, type FullDriftResult } from './parser';
 import { flattenFindings, RULE_LABEL, type Finding } from './comment/findings';
 import { loadSuppressions, applySuppressions, type SuppressRules } from './comment/suppress';
 import { buildDetectionProfile } from './profiles';
@@ -220,14 +220,16 @@ export function discoverFiles(opts: CliOptions): string[] {
 // ── Analysis ────────────────────────────────────────────────────────────────────
 
 function resolveDsExports(config: PolderConfig, cwd: string): Set<string> {
-  const nodeModulesDir = path.join(cwd, 'node_modules');
   const dsExports = new Set<string>();
   for (const pkg of config.componentLibrary) {
-    const pkgExports = resolveExports(pkg, nodeModulesDir);
+    const libraryPath = config.libraryPaths?.[pkg];
+    const pkgExports = resolveDsSurface(pkg, cwd, libraryPath);
     if (pkgExports.size === 0) {
+      const tried = libraryPath ? `node_modules or ${libraryPath}` : 'node_modules';
       process.stderr.write(
-        `polder-drift: could not resolve exports for "${pkg}" from node_modules. ` +
-          `Run your install step first. Falling back to PascalCase heuristic.\n`,
+        `polder-drift: could not resolve exports for "${pkg}" from ${tried}. ` +
+          `Run your install step first, or point library_paths."${pkg}" at the ` +
+          `package's repo/source. Falling back to PascalCase heuristic.\n`,
       );
     }
     for (const name of pkgExports) dsExports.add(name);
