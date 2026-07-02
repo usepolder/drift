@@ -9,6 +9,7 @@ import * as path from 'path';
 import { type PolderConfig } from './config';
 import { resolveConfig } from './resolve-config';
 import { resolveExports } from './parser';
+import { buildDetectionProfile } from './profiles';
 import { analyzePr } from './comment/analyze';
 import { loadSuppressions } from './comment/suppress';
 import { COMMENT_MARKER } from './comment/render';
@@ -94,6 +95,9 @@ export async function runCi(
     dsExports,
     canonicalPkgs: config.componentLibrary,
     allowlist: config.allowlist,
+    // PolderConfig extends CustomDetection, so config carries any custom
+    // tokens/signatures straight into the profile.
+    profile: buildDetectionProfile(config.componentLibrary, config),
     suppress,
   });
 

@@ -15,6 +15,14 @@ detection live in [`src/resolve-config.ts`](../src/resolve-config.ts) and
 component_library: "@your-org/design-system"   # string or list — REQUIRED
 allowlist: []                                   # import-source prefixes to ignore
 fail_on_drift: false                            # fail the check / exit non-zero on drift
+
+# Custom detection data (all optional) — powers the inline rules for design
+# systems without built-in profiles. See "Detection profiles" below.
+tokens: {}            # hex value → token label
+class_prefixes: []    # DS class-name prefixes
+prop_signatures: {}   # DS component → distinctive prop names
+sub_components: {}    # sub-component element → DS parent
+name_segments: {}     # PascalCase word → DS parent
 ```
 
 ### `component_library` (required)
@@ -68,6 +76,75 @@ When `true`, the run fails on **newly introduced** drift:
   `--fail-on-drift` / `--no-fail`).
 
 Only the literal boolean `true` enables it; any other value is treated as `false`.
+
+## Detection profiles
+
+The three inline rules — token-fingerprint, prop-match, and sub-component — need
+DS-specific data to work: which hex values are design tokens, which prop combinations
+identify a component, which sub-components imply a parent. That data is a **detection
+profile** ([profiles.ts](../src/profiles.ts)), built per run from two sources:
+
+1. **Built-in profiles**, applied when a matching package appears in
+   `component_library`: `@carbon/*` activates the Carbon profile, `@mui/*` the MUI
+   profile. Built-ins never apply outside their DS — a Carbon-only repo is not flagged
+   with MUI palette names for coincidental hex values.
+2. **Custom keys** from `.polder.yml` (below), merged on top. This is how an in-house
+   design system gets inline detection.
+
+With neither (an unknown `component_library` and no custom keys), only the
+export-based rules run: import-drift and local-shadow, which need no profile.
+
+### `tokens` (optional)
+
+Hardcoded design-token values: a mapping of 6-digit hex colors to token labels. A
+component whose body contains one of these values trips
+[token-fingerprint](reference-detection-rules.md). Keys are case-insensitive;
+anything but `#rrggbb` is a config error.
+
+```yaml
+tokens:
+  "#ff3366": "brand/coral"
+  "#0a1f44": "brand/navy"
+```
+
+### `class_prefixes` (optional)
+
+Class-name prefixes owned by your design system. A locally defined component using a
+class that starts with one of these also trips token-fingerprint (it is styling itself
+with DS internals). Entries must be non-empty strings.
+
+```yaml
+class_prefixes:
+  - "acme--"
+```
+
+### `prop_signatures` (optional)
+
+Distinctive prop names per DS component, for the prop-match rule. A local component
+whose props overlap a signature ≥60% (minimum 2 props) is flagged as a look-alike.
+Each signature must list at least 2 props — fewer can never match.
+
+```yaml
+prop_signatures:
+  AcmeModal: [open, onClose, heading, primaryAction]
+  AcmeSlider: [value, onChange, min, max, step]
+```
+
+### `sub_components` / `name_segments` (optional)
+
+For the sub-component rule: `sub_components` maps a sub-component JSX element to the
+DS parent it belongs to; using one inside a local component **without** the real parent
+element suggests a reimplementation. `name_segments` maps PascalCase words in local
+component names to DS parents and only upgrades a sub-component match's confidence
+from `medium` to `high` — it triggers nothing on its own.
+
+```yaml
+sub_components:
+  AcmeCardBody: AcmeCard
+  AcmeCardFooter: AcmeCard
+name_segments:
+  Card: AcmeCard
+```
 
 ## Resolution precedence
 

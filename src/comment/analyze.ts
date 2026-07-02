@@ -5,7 +5,8 @@
  * this is fully unit-testable without git or a network. GitHub and Azure DevOps
  * transports supply the readers and then post `result.body` when `result.shouldComment`.
  */
-import { checkDriftFull, countCanonicalUsages } from '../parser';
+import { analyzeFile } from '../parser';
+import type { DetectionProfile } from '../profiles';
 import { flattenFindings, countDriftedComponents, type Finding } from './findings';
 import { applySuppressions, type SuppressRules } from './suppress';
 import { renderComment, type RenderResult } from './render';
@@ -29,6 +30,11 @@ export interface AnalyzeParams {
   dsExports: Set<string>;
   canonicalPkgs: string[];
   allowlist: string[];
+  /**
+   * Detection profile for the inline rules. Omit to derive from `canonicalPkgs`
+   * alone; pass one built from config to include custom tokens/signatures.
+   */
+  profile?: DetectionProfile;
   suppress: SuppressRules;
   minSeverityToComment?: 'high' | 'medium';
   marker?: string;
@@ -48,9 +54,10 @@ export function analyzePr(p: AnalyzeParams): AnalyzeResult {
   for (const file of p.files) {
     const content = p.readCurrent(file);
     if (content == null) continue;
-    const res = checkDriftFull(content, p.dsExports, p.canonicalPkgs, p.allowlist, file);
-    findings.push(...flattenFindings(file, res));
-    canonicalUsages += countCanonicalUsages(content, p.dsExports, p.canonicalPkgs);
+    // analyzeFile parses once per file for both drift and the canonical-usage count.
+    const res = analyzeFile(content, p.dsExports, p.canonicalPkgs, p.allowlist, file, p.profile);
+    findings.push(...flattenFindings(file, res.drift));
+    canonicalUsages += res.canonicalUsages;
   }
 
   findings = applySuppressions(findings, p.suppress);
@@ -76,13 +83,13 @@ export function analyzePr(p: AnalyzeParams): AnalyzeResult {
     for (const file of p.files) {
       const base = p.readBase(file);
       if (base == null) continue;
-      const res = checkDriftFull(base, p.dsExports, p.canonicalPkgs, p.allowlist, file);
+      const res = analyzeFile(base, p.dsExports, p.canonicalPkgs, p.allowlist, file, p.profile);
       // Suppress base findings the same way head findings are (analyze above), so the
       // adoption delta compares like with like and .polderignore doesn't fake a gain.
-      const ff = applySuppressions(flattenFindings(file, res), p.suppress);
+      const ff = applySuppressions(flattenFindings(file, res.drift), p.suppress);
       for (const f of ff) preexistingIds.add(f.id);
       baseFindings.push(...ff);
-      baseCanonical += countCanonicalUsages(base, p.dsExports, p.canonicalPkgs);
+      baseCanonical += res.canonicalUsages;
     }
     const baseAdopt = adoptionPct(baseCanonical, countDriftedComponents(baseFindings));
     const headAdopt = adoptionPct(canonicalUsages, driftedComponents);

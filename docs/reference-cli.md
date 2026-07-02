@@ -38,8 +38,9 @@ polder-drift scan [options] [files...]
 Discovers source files, runs all five [detection rules](reference-detection-rules.md)
 on each, and prints a human or JSON report.
 
-> **`scan` does not read `.polderignore`.** Suppression applies only to the PR-comment
-> surfaces (the Action and `ci`). See [Suppress findings](howto-suppress-findings.md).
+> `scan` honours the repo-root `.polderignore`, the same way the PR-comment surfaces
+> do, and reports how many findings it suppressed. See
+> [Suppress findings](howto-suppress-findings.md).
 
 ### Discovery (pick one; default is `--diff` with no ref)
 
@@ -118,12 +119,20 @@ polder-drift scan src/Button.tsx src/Modal.tsx
 {
   "version": 1,
   "config": { "componentLibrary": ["@acme/ds"], "allowlist": [], "failOnDrift": true },
-  "summary": { "filesAnalyzed": 3, "filesWithDrift": 1, "totalSignals": 2 },
+  "summary": { "filesAnalyzed": 3, "filesWithDrift": 1, "totalSignals": 2, "suppressedSignals": 0 },
   "files": [
     {
       "filename": "src/Modal.tsx",
       "totalCount": 2,
-      "importDrift": { "count": 1, "symbols": ["Button from './ui/Button'"] },
+      "findings": [
+        { "id": "a1b2c3d4e5f6", "rule": "import-drift", "severity": "high", "line": 2,
+          "title": "Button from './ui/Button'",
+          "detail": "DS component imported from a local path instead of the package" },
+        { "id": "f6e5d4c3b2a1", "rule": "prop-match", "severity": "medium", "line": 9,
+          "title": "Modal ~ ComposedModal", "detail": "66% prop overlap: open, onClose" }
+      ],
+      "importDrift": { "count": 1, "symbols": ["Button from './ui/Button'"],
+                       "lines": { "Button from './ui/Button'": 2 } },
       "inlineDrift": {
         "localShadows": [],
         "tokenFingerprints": [],
@@ -131,16 +140,18 @@ polder-drift scan src/Button.tsx src/Modal.tsx
           { "componentName": "Modal", "matchedDs": "ComposedModal",
             "matchedProps": ["open", "onClose"], "score": 0.66 }
         ],
-        "subComponentMatches": []
+        "subComponentMatches": [],
+        "componentLines": { "Modal": 9 }
       }
     }
   ]
 }
 ```
 
-The `files[]` entries are the same `FullDriftResult` shape the Action renders. Note the
-JSON report does **not** include the stable finding ids — those are surfaced in the PR
-comment. To consume the report programmatically, see
+The `files[].findings[]` list is the normalised view every surface shares: each entry
+carries the same stable `id` the PR comment shows (and `.polderignore` suppresses).
+The `importDrift`/`inlineDrift` shapes are the raw engine output (`FullDriftResult`),
+already filtered by `.polderignore`. To consume the report programmatically, see
 [Consume Polder Drift programmatically](howto-consume-json.md).
 
 ---

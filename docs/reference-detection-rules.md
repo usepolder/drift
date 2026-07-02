@@ -95,20 +95,24 @@ A component body that hardcodes a **design-token hex value** or a **DS CSS class
 
 **Triggers when** a component's function body contains either:
 
-- a 6-digit hex color present in `CARBON_TOKENS` or `MUI_TOKENS`, **or**
-- a class name matching `cds--…` (Carbon) or `Mui<Component>-…` (MUI).
+- a 6-digit hex color listed in the run's [detection profile](reference-configuration.md#detection-profiles)
+  (built-in: 14 Carbon tokens when `@carbon/*` is configured, 15 MUI v5 tokens when
+  `@mui/*` is; custom: the `tokens` config key), **or**
+- a class name matching one of the profile's class patterns (built-in: `cds--…` for
+  Carbon, `Mui<Component>-…` for MUI; custom: the `class_prefixes` config key).
 
 ```tsx
 function PriceSlider() {
-  // #1976d2 is MUI primary.main → token fingerprint
+  // #1976d2 is MUI primary.main → token fingerprint (when @mui/* is configured)
   return <div style={{ background: '#1976d2' }} />;
 }
 ```
 
-The token dictionaries are intentionally small and high-specificity. Generic values
-(`#ffffff`, `#cccccc`, common grays) are **deliberately omitted** to keep the
-false-positive rate low. Current coverage: **14 Carbon tokens** and **15 MUI v5 tokens**
-(`CARBON_TOKENS` / `MUI_TOKENS` in [parser.ts:238](../src/parser.ts)).
+The built-in token dictionaries ([profiles.ts](../src/profiles.ts)) are intentionally
+small and high-specificity. Generic values (`#ffffff`, `#cccccc`, common grays) are
+**deliberately omitted** to keep the false-positive rate low — and a profile only
+applies when its design system is actually configured, so a Carbon repo is never
+flagged with MUI palette names for coincidental hex values.
 
 **Detail string:** the matched tokens and class names, comma-joined, e.g.
 `#1976d2, MuiSlider-root`.
@@ -124,10 +128,10 @@ names overlap a DS component's prop signature with:
 - **score ≥ 0.60**, where `score = matchedProps / dsSignatureLength`, **and**
 - **at least 2** matched props.
 
-The best-scoring DS component wins. Signatures are curated per component in
-`DS_PROP_SIGNATURES` ([parser.ts:411](../src/parser.ts)) and include only
-distinctive props — broad enough to catch forks, tight enough to avoid matching
-unrelated components that happen to share a common prop name.
+The best-scoring DS component wins. Signatures come from the run's detection profile
+(built-in per-DS sets in [profiles.ts](../src/profiles.ts), plus the `prop_signatures`
+config key) and include only distinctive props — broad enough to catch forks, tight
+enough to avoid matching unrelated components that happen to share a common prop name.
 
 ```tsx
 // 5/8 MuiSlider props (value, onChange, min, max, step) → score 0.625 ≥ 0.60 → match
@@ -142,10 +146,11 @@ A local component that renders DS **sub-components without their real parent** �
 e.g. a `<CardMedia>` and `<CardContent>` with no `<Card>` wrapping them, which means
 the component is rebuilding the parent from scratch.
 
-**Triggers when** the body uses a JSX element listed in `DS_SUBCOMPONENT_MAP`
-(e.g. `CardMedia → MuiCard`) **and** the real parent element is **not** also present
-in the body. Legitimate composition (`<Card><CardMedia/></Card>`) is skipped because
-the parent is present.
+**Triggers when** the body uses a JSX element listed in the profile's sub-component
+map (built-ins in [profiles.ts](../src/profiles.ts), e.g. `CardMedia → MuiCard`, plus
+the `sub_components` config key) **and** the real parent element is **not** also
+present in the body. Legitimate composition (`<Card><CardMedia/></Card>`) is skipped
+because the parent is present.
 
 **Confidence:**
 
@@ -161,9 +166,9 @@ function ProductCard() {
 }
 ```
 
-`DS_NAME_SEGMENTS` is conservative on purpose: generic words (Button, Input, Text,
-Icon, List) are excluded so a component named `ButtonGroup` is not flagged on its name
-alone.
+The built-in name segments are conservative on purpose: generic words (Button, Input,
+Text, Icon, List) are excluded so a component named `ButtonGroup` is not flagged on
+its name alone. Custom segments come from the `name_segments` config key.
 
 **Detail string:** e.g. `high: uses CardMedia, CardContent`.
 

@@ -37,12 +37,24 @@ go to **stderr**, so redirecting stdout gives you clean JSON. Swap `--all` for
 {
   "version": 1,
   "config": { "componentLibrary": ["@acme/ds"], "allowlist": [], "failOnDrift": false },
-  "summary": { "filesAnalyzed": 12, "filesWithDrift": 2, "totalSignals": 5 },
+  "summary": { "filesAnalyzed": 12, "filesWithDrift": 2, "totalSignals": 5, "suppressedSignals": 0 },
   "files": [
     {
       "filename": "src/PLP.tsx",
       "totalCount": 3,
-      "importDrift": { "count": 1, "symbols": ["Card from './ui/Card'"] },
+      "findings": [
+        { "id": "a1b2c3d4e5f6", "rule": "import-drift", "severity": "high", "line": 3,
+          "title": "Card from './ui/Card'",
+          "detail": "DS component imported from a local path instead of the package" },
+        { "id": "0f9e8d7c6b5a", "rule": "prop-match", "severity": "medium", "line": 18,
+          "title": "PriceSlider ~ MuiSlider",
+          "detail": "62% prop overlap: value, onChange, min, max, step" }
+      ],
+      "importDrift": {
+        "count": 1,
+        "symbols": ["Card from './ui/Card'"],
+        "lines": { "Card from './ui/Card'": 3 }
+      },
       "inlineDrift": {
         "localShadows": [],
         "tokenFingerprints": [
@@ -52,17 +64,21 @@ go to **stderr**, so redirecting stdout gives you clean JSON. Swap `--all` for
           { "componentName": "PriceSlider", "matchedDs": "MuiSlider",
             "matchedProps": ["value", "onChange", "min", "max", "step"], "score": 0.625 }
         ],
-        "subComponentMatches": []
+        "subComponentMatches": [],
+        "componentLines": { "PriceSlider": 18 }
       }
     }
   ]
 }
 ```
 
-Every entry in `files[]` is the engine's `FullDriftResult` for one file. Each
-`inlineDrift.*` array names the offending component and the matched DS knowledge, so a
-downstream tool can jump straight to the symbol. (The JSON does not include the stable
-finding ids; those are surfaced only in the PR comment.)
+`files[].findings[]` is usually all a downstream tool needs: each finding carries the
+same stable `id` shown in the PR comment (usable in `.polderignore`), its rule,
+severity, and the 1-based source `line` (the import specifier for import-drift, the
+component definition for the inline rules), so a fixer can jump straight to the code.
+The `importDrift`/`inlineDrift` shapes are the raw engine output for one file
+(`FullDriftResult`), with the same line info in `importDrift.lines` and
+`inlineDrift.componentLines`. Both views are already filtered by `.polderignore`.
 
 ### 3. Act on it
 

@@ -9,11 +9,10 @@ one specific finding, a whole rule, or an entire path — using a `.polderignore
   or [`polder-drift ci`](azure-pipelines.md) on Azure DevOps.
 - Write access to the repo root (to add `.polderignore`).
 
-> **Scope:** `.polderignore` is read on the **PR-comment surfaces only** (the Action and
-> `ci`), where it is loaded by the shared CI runner ([run-ci.ts:64](../src/run-ci.ts)).
-> The local `polder-drift scan` command does **not** read it — `scan` always reports
-> everything it finds. Use `--no-fail` or the `allowlist` config if you need `scan` to
-> stop failing on known drift.
+> **Scope:** `.polderignore` is honoured by **every surface** — the Action, `ci`, and
+> the local `polder-drift scan` command — so a locally-clean scan means a clean PR
+> comment. The human report notes how many findings were suppressed, and the `--json`
+> report carries the count in `summary.suppressedSignals`.
 
 ## Steps
 
@@ -68,9 +67,12 @@ The 12-char id is shown in the **`ID` column of the PR comment table**, and in t
 
 Copy the value from the `ID` column (without the backticks) into `.polderignore`.
 
+You can also read ids locally, without pushing a PR: each finding line in
+`polder-drift scan` output ends with its id in brackets (`[a1b2c3d4e5f6]`), and the
+`--json` report carries them in `files[].findings[].id`.
+
 > The id is **stable** — `sha1(file | rule | key)` — so it keeps matching the same
 > finding across future runs. It changes only if the file path, rule, or symbol changes.
-> The CLI `--json` report does not include ids; read them from the PR comment.
 
 ### 4. Commit `.polderignore`
 
@@ -81,10 +83,11 @@ git commit -m "chore: suppress reviewed drift findings"
 
 ## Verification
 
-Push the branch (or re-run the check) and confirm the suppressed finding no longer
-appears in the **new** drift table. On GitHub you can also re-trigger by pushing an
-empty commit or re-running the workflow. A suppressed finding is removed before
-rendering, so it won't appear as new or pre-existing.
+Verify locally first: run `polder-drift scan` on the affected files and confirm the
+finding is gone (the summary line reports it as suppressed). Then push the branch (or
+re-run the check) and confirm it no longer appears in the **new** drift table. A
+suppressed finding is removed before rendering, so it won't appear as new or
+pre-existing.
 
 ## Troubleshooting
 
@@ -95,10 +98,9 @@ rendering, so it won't appear as new or pre-existing.
 - **A path rule matches nothing.** Globs are anchored to the full repo-relative path as
   reported in the finding (e.g. `src/legacy/Button.tsx`). Use `**` to cross directories;
   a single `*` stops at `/`.
-- **`scan` still reports it locally.** Expected — `scan` ignores `.polderignore`. To stop
-  `scan` failing CI on known drift, pass `--no-fail`, or allowlist the import source in
-  `.polder.yml` (see [Configuration](reference-configuration.md)). Allowlisting only
-  affects the import-drift rule.
+- **`scan` still reports it locally.** Make sure the `.polderignore` sits at the
+  directory `scan` runs from (or the one passed via `--cwd`) — that's where it is
+  loaded, same as the repo root in CI.
 - **You want to silence a whole library tree, not list ids.** Prefer a `path:` glob or
   the `allowlist` config over enumerating ids; it survives refactors.
 

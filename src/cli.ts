@@ -5,6 +5,9 @@ import { execFileSync } from 'child_process';
 import { type PolderConfig } from './config';
 import { resolveConfig, type ResolvedConfig } from './resolve-config';
 import { resolveExports, checkDriftFull, type FullDriftResult } from './parser';
+import { flattenFindings, RULE_LABEL, type Finding } from './comment/findings';
+import { loadSuppressions, applySuppressions, type SuppressRules } from './comment/suppress';
+import { buildDetectionProfile } from './profiles';
 import { runInitSubcommand } from './commands/init';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -22,9 +25,24 @@ export interface CliOptions {
   help: boolean;
 }
 
+/**
+ * One normalised finding, same id/severity the PR comment shows. The id is what a
+ * `.polderignore` line suppresses, so the CLI is where you discover it locally.
+ */
+export interface CliFinding {
+  id: string;
+  rule: Finding['rule'];
+  severity: Finding['severity'];
+  title: string;
+  detail: string;
+  /** 1-based source line (import specifier / component definition), when known. */
+  line?: number;
+}
+
 export interface CliFileReport {
   filename: string;
   totalCount: number;
+  findings: CliFinding[];
   importDrift: FullDriftResult['importDrift'];
   inlineDrift: FullDriftResult['inlineDrift'];
 }
@@ -32,7 +50,13 @@ export interface CliFileReport {
 export interface CliReport {
   version: 1;
   config: { componentLibrary: string[]; allowlist: string[]; failOnDrift: boolean };
-  summary: { filesAnalyzed: number; filesWithDrift: number; totalSignals: number };
+  summary: {
+    filesAnalyzed: number;
+    filesWithDrift: number;
+    totalSignals: number;
+    /** Findings hidden by `.polderignore` — kept visible so a quiet scan is explainable. */
+    suppressedSignals: number;
+  };
   files: CliFileReport[];
 }
 
@@ -216,9 +240,17 @@ export function buildReport(
   cwd: string,
   files: string[],
   effectiveFailOnDrift: boolean,
+  suppress?: SuppressRules,
 ): CliReport {
+  // Same `.polderignore` the CI comment honours — a locally-clean scan must mean a
+  // clean PR comment, so the CLI cannot skip suppression.
+  const rules = suppress ?? loadSuppressions(cwd);
   const dsExports = resolveDsExports(config, cwd);
+  // Built once per run: built-in data for the configured DS packages plus any custom
+  // tokens/signatures from .polder.yml (PolderConfig extends CustomDetection).
+  const profile = buildDetectionProfile(config.componentLibrary, config);
   const fileReports: CliFileReport[] = [];
+  let suppressedSignals = 0;
 
   for (const filename of files) {
     const filePath = path.isAbsolute(filename) ? filename : path.join(cwd, filename);
@@ -235,12 +267,41 @@ export function buildReport(
       config.componentLibrary,
       config.allowlist,
       filename,
+      profile,
     );
+
+    const all = flattenFindings(filename, result);
+    const kept = applySuppressions(all, rules);
+    suppressedSignals += all.length - kept.length;
+
+    // Filter the raw engine shapes down to what survived suppression, so the JSON
+    // report never disagrees with the findings list. Every rule keys on the same
+    // (rule, key) pair flattenFindings used.
+    const keep = new Set(kept.map((f) => `${f.rule}|${f.key}`));
+    const importSymbols = result.importDrift.symbols.filter((s) => keep.has(`import-drift|${s}`));
     fileReports.push({
       filename,
-      totalCount: result.totalCount,
-      importDrift: result.importDrift,
-      inlineDrift: result.inlineDrift,
+      totalCount: kept.length,
+      findings: kept.map(({ id, rule, severity, title, detail, line }) => ({ id, rule, severity, title, detail, line })),
+      importDrift: {
+        symbols: importSymbols,
+        count: importSymbols.length,
+        lines: Object.fromEntries(
+          importSymbols.filter((s) => result.importDrift.lines[s] !== undefined)
+            .map((s) => [s, result.importDrift.lines[s]]),
+        ),
+      },
+      inlineDrift: {
+        localShadows: result.inlineDrift.localShadows.filter((n) => keep.has(`local-shadow|${n}`)),
+        tokenFingerprints: result.inlineDrift.tokenFingerprints.filter((fp) =>
+          keep.has(`token-fingerprint|${fp.componentName}`),
+        ),
+        propMatches: result.inlineDrift.propMatches.filter((pm) => keep.has(`prop-match|${pm.componentName}`)),
+        subComponentMatches: result.inlineDrift.subComponentMatches.filter((sm) =>
+          keep.has(`subcomponent|${sm.componentName}`),
+        ),
+        componentLines: result.inlineDrift.componentLines,
+      },
     });
   }
 
@@ -254,7 +315,7 @@ export function buildReport(
       allowlist: config.allowlist,
       failOnDrift: effectiveFailOnDrift,
     },
-    summary: { filesAnalyzed: fileReports.length, filesWithDrift, totalSignals },
+    summary: { filesAnalyzed: fileReports.length, filesWithDrift, totalSignals, suppressedSignals },
     files: fileReports,
   };
 }
@@ -264,15 +325,19 @@ export function buildReport(
 export function formatHuman(report: CliReport): string {
   const { summary } = report;
   const lines: string[] = [];
+  const suppressedNote =
+    summary.suppressedSignals > 0 ? ` (${summary.suppressedSignals} suppressed via .polderignore)` : '';
 
   if (summary.totalSignals === 0) {
-    lines.push(`✓ No design system drift detected across ${summary.filesAnalyzed} file(s).`);
+    lines.push(
+      `✓ No design system drift detected across ${summary.filesAnalyzed} file(s).${suppressedNote}`,
+    );
     return lines.join('\n');
   }
 
   lines.push(
     `⚠ ${summary.totalSignals} drift signal(s) across ${summary.filesWithDrift} of ` +
-      `${summary.filesAnalyzed} file(s) analysed.`,
+      `${summary.filesAnalyzed} file(s) analysed.${suppressedNote}`,
   );
   lines.push('');
 
@@ -280,27 +345,12 @@ export function formatHuman(report: CliReport): string {
     if (f.totalCount === 0) continue;
     lines.push(`${f.filename}`);
 
-    for (const sym of f.importDrift.symbols) {
-      lines.push(`  import drift     ${sym} (imported locally instead of from the package)`);
-    }
-    for (const name of f.inlineDrift.localShadows) {
-      lines.push(`  local shadow     ${name} (shadows a DS export)`);
-    }
-    for (const fp of f.inlineDrift.tokenFingerprints) {
-      const signals = [...fp.tokens, ...fp.classNames].join(', ');
-      lines.push(`  token fingerprint ${fp.componentName} (${signals})`);
-    }
-    for (const pm of f.inlineDrift.propMatches) {
-      lines.push(
-        `  prop match       ${pm.componentName} ~ ${pm.matchedDs} ` +
-          `(${Math.round(pm.score * 100)}%: ${pm.matchedProps.join(', ')})`,
-      );
-    }
-    for (const sm of f.inlineDrift.subComponentMatches) {
-      lines.push(
-        `  subcomponent     ${sm.componentName} ~ ${sm.matchedDs} ` +
-          `(${sm.confidence}: ${sm.subComponentsUsed.join(', ')})`,
-      );
+    // Leading gutter is the source line; the trailing [id] is the `.polderignore`
+    // handle for the finding.
+    for (const finding of f.findings) {
+      const gutter = (finding.line !== undefined ? `:${finding.line}` : '').padEnd(6);
+      const label = RULE_LABEL[finding.rule].toLowerCase().padEnd(18);
+      lines.push(`  ${gutter}${label}${finding.title} (${finding.detail}) [${finding.id}]`);
     }
     lines.push('');
   }

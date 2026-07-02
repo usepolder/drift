@@ -10,6 +10,7 @@ function result(over: Partial<FullDriftResult['inlineDrift']> = {}, symbols: str
     tokenFingerprints: [],
     propMatches: [],
     subComponentMatches: [],
+    componentLines: {},
     ...over,
   };
   const count =
@@ -18,7 +19,7 @@ function result(over: Partial<FullDriftResult['inlineDrift']> = {}, symbols: str
     inlineDrift.tokenFingerprints.length +
     inlineDrift.propMatches.length +
     inlineDrift.subComponentMatches.length;
-  return { importDrift: { count: symbols.length, symbols }, inlineDrift, totalCount: count };
+  return { importDrift: { count: symbols.length, symbols, lines: {} }, inlineDrift, totalCount: count };
 }
 
 describe('flattenFindings + stable ids', () => {
@@ -54,6 +55,26 @@ describe('flattenFindings + stable ids', () => {
     expect(f.find((x) => x.rule === 'import-drift')!.severity).toBe('high');
     expect(f.find((x) => x.rule === 'local-shadow')!.severity).toBe('high');
     expect(f.find((x) => x.rule === 'token-fingerprint')!.severity).toBe('medium');
+  });
+
+  it('carries source lines from the engine maps, without affecting the id', () => {
+    const r = result(
+      { localShadows: ['Button'], componentLines: { Button: 7 } },
+      ["B from './b'"],
+    );
+    r.importDrift.lines["B from './b'"] = 2;
+    const f = flattenFindings('src/X.tsx', r);
+    expect(f.find((x) => x.rule === 'import-drift')!.line).toBe(2);
+    expect(f.find((x) => x.rule === 'local-shadow')!.line).toBe(7);
+    // The id hashes (file | rule | key) only — same id with or without a line.
+    expect(f.find((x) => x.rule === 'local-shadow')!.id).toBe(findingId('src/X.tsx', 'local-shadow', 'Button'));
+  });
+
+  it('renderComment shows file:line in the Where column when a line is known', () => {
+    const r = result({ localShadows: ['Button'], componentLines: { Button: 7 } });
+    const findings = flattenFindings('src/X.tsx', r);
+    const { body } = renderComment(findings);
+    expect(body).toContain('src/X.tsx:7');
   });
 });
 

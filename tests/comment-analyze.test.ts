@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { analyzePr, type AnalyzeParams } from '../src/comment/analyze';
+import { allBuiltinProfiles } from '../src/profiles';
 
 const HEAD = `import { Tile } from '@acme/ds';\nimport { Button } from './ui/Button';\nexport const X = () => <Button />;\n`;
 const BASE_CLEAN = `import { Tile } from '@acme/ds';\nexport const X = () => <Tile />;\n`;
@@ -43,7 +44,9 @@ describe('analyzePr', () => {
       `    </div>\n` +
       `  );\n` +
       `};\n`;
-    const r = analyzePr(base({ readCurrent: () => MULTI }));
+    // '@acme/ds' matches no built-in profile, so hand one in explicitly — this test is
+    // about the adoption metric folding multiple signals, not about profile matching.
+    const r = analyzePr(base({ readCurrent: () => MULTI, profile: allBuiltinProfiles() }));
     expect(r.totalFindings).toBe(3); // three raw findings on one component
     // 1 canonical (Tile) vs 1 drifted component => 50%, NOT 1/(1+3)=25% as the old
     // finding-count metric reported (a single drift would have dominated the headline).

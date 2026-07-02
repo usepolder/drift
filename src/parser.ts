@@ -2,12 +2,30 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { parse, type ParserOptions } from '@babel/parser';
 import type { ImportDeclaration, Identifier } from '@babel/types';
+import {
+  type DetectionProfile,
+  CARBON_PROFILE,
+  MUI_PROFILE,
+  buildDetectionProfile,
+  allBuiltinProfiles,
+} from './profiles';
 
 const BABEL_OPTIONS: ParserOptions = {
   plugins: ['typescript', 'jsx'],
   sourceType: 'module',
   errorRecovery: true,
 };
+
+type Ast = ReturnType<typeof parse>;
+
+/** Parse once; null when @babel/parser can't parse even with errorRecovery. */
+function parseSource(fileContent: string): Ast | null {
+  try {
+    return parse(fileContent, BABEL_OPTIONS);
+  } catch {
+    return null;
+  }
+}
 
 // Matches `export * from './path'` and `export { X } from './path'`
 const REEXPORT_RE = /export\s+(?:\*|\{[^}]*\})\s+from\s+['"]([^'"]+)['"]/g;
@@ -120,27 +138,37 @@ export interface DriftResult {
   driftedSymbols: string[];
 }
 
+export interface ImportDriftCheck {
+  driftCount: number;
+  driftedSymbols: string[];
+  /** 1-based source line per drifted symbol, keyed by the entry in `driftedSymbols`. */
+  lines: Record<string, number>;
+}
+
 export function checkDrift(
   fileContent: string,
   dsExports: Set<string>,
   canonicalPkgs: string[],
   allowlist: string[],
   filename?: string,
-): { driftCount: number; driftedSymbols: string[] } {
+): ImportDriftCheck {
   const isTsx = filename?.endsWith('.tsx') ?? false;
   if (!isTsx && !isComponentFile(fileContent)) {
-    return { driftCount: 0, driftedSymbols: [] };
+    return { driftCount: 0, driftedSymbols: [], lines: {} };
   }
+  const ast = parseSource(fileContent);
+  if (!ast) return { driftCount: 0, driftedSymbols: [], lines: {} };
+  return checkDriftAst(ast, dsExports, canonicalPkgs, allowlist);
+}
 
-  let ast;
-  try {
-    ast = parse(fileContent, BABEL_OPTIONS);
-  } catch {
-    // @babel/parser couldn't parse this file even with errorRecovery
-    return { driftCount: 0, driftedSymbols: [] };
-  }
-
+function checkDriftAst(
+  ast: Ast,
+  dsExports: Set<string>,
+  canonicalPkgs: string[],
+  allowlist: string[],
+): ImportDriftCheck {
   const driftedSymbols: string[] = [];
+  const lines: Record<string, number> = {};
 
   for (const node of ast.program.body) {
     if (node.type !== 'ImportDeclaration') continue;
@@ -175,20 +203,25 @@ export function checkDrift(
                 : specifier.imported.value)
             : specifier.local.name;
 
+        // Prefer the specifier's own line (multi-line import blocks), falling back
+        // to the declaration's.
+        const line = specifier.loc?.start.line ?? decl.loc?.start.line;
         if (dsExports.size > 0 && dsExports.has(localName)) {
           driftedSymbols.push(`${localName} from '${source}'`);
+          if (line !== undefined) lines[`${localName} from '${source}'`] = line;
         } else if (dsExports.size === 0) {
           // Fallback: no DS exports resolved — use path-only heuristic
           // Only flag PascalCase symbols (likely components)
           if (/^[A-Z]/.test(localName)) {
             driftedSymbols.push(`${localName} from '${source}'`);
+            if (line !== undefined) lines[`${localName} from '${source}'`] = line;
           }
         }
       }
     }
   }
 
-  return { driftCount: driftedSymbols.length, driftedSymbols };
+  return { driftCount: driftedSymbols.length, driftedSymbols, lines };
 }
 
 /**
@@ -202,13 +235,12 @@ export function countCanonicalUsages(
   dsExports: Set<string>,
   canonicalPkgs: string[],
 ): number {
-  let ast;
-  try {
-    ast = parse(fileContent, BABEL_OPTIONS);
-  } catch {
-    return 0;
-  }
+  const ast = parseSource(fileContent);
+  if (!ast) return 0;
+  return countCanonicalUsagesAst(ast, dsExports, canonicalPkgs);
+}
 
+function countCanonicalUsagesAst(ast: Ast, dsExports: Set<string>, canonicalPkgs: string[]): number {
   let count = 0;
   for (const node of ast.program.body) {
     if (node.type !== 'ImportDeclaration') continue;
@@ -235,48 +267,13 @@ export function countCanonicalUsages(
 
 // ── Phase 2: inline drift ─────────────────────────────────────────────────────
 
-// Carbon Design System v11 (White theme) — high-specificity hex tokens.
-// Values common to any UI (#fff, #ccc, generic grays) are intentionally omitted
-// to keep the false-positive rate low.
-export const CARBON_TOKENS: Record<string, string> = {
-  '#0f62fe': 'interactive / blue-60',
-  '#0043ce': 'interactive-02 / blue-70',
-  '#002d9c': 'interactive-03 / blue-80',
-  '#161616': 'text-primary / gray-100',
-  '#da1e28': 'support-error / red-60',
-  '#198038': 'support-success / green-50',
-  '#24a148': 'support-success-hover / green-40',
-  '#f1c21b': 'support-warning / yellow-30',
-  '#ff832b': 'support-caution / orange-40',
-  '#ba4e00': 'support-caution-dark / orange-70',
-  '#4589ff': 'interactive-hover / blue-40',
-  '#007d79': 'teal-60',
-  '#08bdba': 'teal-40',
-  '#6929c4': 'purple-70',
-};
-
-// Material UI v5 default theme palette — high-specificity values only.
-export const MUI_TOKENS: Record<string, string> = {
-  '#1976d2': 'primary.main',
-  '#1565c0': 'primary.dark',
-  '#42a5f5': 'primary.light',
-  '#d32f2f': 'error.main',
-  '#c62828': 'error.dark',
-  '#ef5350': 'error.light',
-  '#2e7d32': 'success.main',
-  '#388e3c': 'success.light',
-  '#1b5e20': 'success.dark',
-  '#ed6c02': 'warning.main',
-  '#e65100': 'warning.dark',
-  '#ff9800': 'warning.light',
-  '#0288d1': 'info.main',
-  '#01579b': 'info.dark',
-  '#29b6f6': 'info.light',
-};
+// The DS-specific data (tokens, class patterns, prop signatures, sub-component maps)
+// lives in ./profiles. These merged views are kept for compatibility with existing
+// importers; new code should build a DetectionProfile instead.
+export const CARBON_TOKENS: Record<string, string> = CARBON_PROFILE.tokens;
+export const MUI_TOKENS: Record<string, string> = MUI_PROFILE.tokens;
 
 const HEX_COLOR_RE = /#[0-9a-fA-F]{6}\b/g;
-const CDS_CLASS_RE = /\bcds--[a-z][a-z0-9-]*/g;
-const MUI_CLASS_RE = /\bMui[A-Z][a-zA-Z]+-[a-z][a-zA-Z0-9-]*/g;
 
 export interface TokenFingerprint {
   componentName: string;
@@ -287,115 +284,17 @@ export interface TokenFingerprint {
 // ── Phase 4: sub-component usage + name-contains ─────────────────────────────
 
 /**
- * DS sub-components that only make sense inside their parent component.
- * Using one inside a locally-defined function body — without also using the
- * real parent DS element — is a strong signal the component reimplements
- * the parent from scratch.
- *
- * Key: JSX element name   →   Value: canonical DS parent name
+ * Merged compatibility views over the built-in profiles (see ./profiles for the
+ * per-DS data and the semantics of each map).
  */
 export const DS_SUBCOMPONENT_MAP: Record<string, string> = {
-  // MUI — Card family
-  CardMedia:                'MuiCard',
-  CardContent:              'MuiCard',
-  CardHeader:               'MuiCard',
-  CardActions:              'MuiCard',
-  // MUI — Dialog family
-  DialogTitle:              'MuiDialog',
-  DialogContent:            'MuiDialog',
-  DialogActions:            'MuiDialog',
-  DialogContentText:        'MuiDialog',
-  // MUI — Accordion family
-  AccordionSummary:         'MuiAccordion',
-  AccordionDetails:         'MuiAccordion',
-  // MUI — List family
-  ListItemText:             'MuiList',
-  ListItemIcon:             'MuiList',
-  ListItemSecondaryAction:  'MuiList',
-  ListSubheader:            'MuiList',
-  // MUI — Stepper family
-  StepLabel:                'MuiStepper',
-  StepContent:              'MuiStepper',
-  StepIcon:                 'MuiStepper',
-  // MUI — Table family
-  TableHead:                'MuiTable',
-  TableBody:                'MuiTable',
-  TableRow:                 'MuiTable',
-  TableCell:                'MuiTable',
-  TableFooter:              'MuiTable',
-  TablePagination:          'MuiTable',
-  // MUI — misc
-  ImageListItem:            'MuiImageList',
-  ImageListItemBar:         'MuiImageList',
-  PaginationItem:           'MuiPagination',
-  SpeedDialAction:          'MuiSpeedDial',
-  BottomNavigationAction:   'MuiBottomNavigation',
-  TreeItem:                 'MuiTreeView',
-  TimelineItem:             'MuiTimeline',
-  TimelineDot:              'MuiTimeline',
-  TimelineContent:          'MuiTimeline',
-  TimelineConnector:        'MuiTimeline',
-  TimelineSeparator:        'MuiTimeline',
-  // Carbon — Modal family
-  ModalBody:                'Modal',
-  ModalHeader:              'Modal',
-  ModalFooter:              'Modal',
-  // Carbon — DataTable family
-  TableToolbar:             'DataTable',
-  TableToolbarContent:      'DataTable',
-  TableToolbarSearch:       'DataTable',
-  TableBatchActions:        'DataTable',
-  TableSelectAll:           'DataTable',
-  TableSelectRow:           'DataTable',
-  TableExpandRow:           'DataTable',
-  TableExpandedRow:         'DataTable',
-  TableExpandHeader:        'DataTable',
-  TableContainer:           'DataTable',
-  // Carbon — Header family
-  HeaderName:               'Header',
-  HeaderNavigation:         'Header',
-  HeaderMenuItem:           'Header',
-  HeaderGlobalBar:          'Header',
-  // Carbon — SideNav family
-  SideNavItems:             'SideNav',
-  SideNavMenu:              'SideNav',
-  SideNavMenuItem:          'SideNav',
-  SideNavLink:              'SideNav',
-  // Carbon — misc
-  BreadcrumbItem:           'Breadcrumb',
-  ProgressStep:             'ProgressIndicator',
-  ContentSwitcherSwitch:    'ContentSwitcher',
-  TabList:                  'Tabs',
-  TabPanels:                'Tabs',
-  TabPanel:                 'Tabs',
-  NotificationActionButton: 'ActionableNotification',
+  ...CARBON_PROFILE.subComponentMap,
+  ...MUI_PROFILE.subComponentMap,
 };
 
-/**
- * PascalCase word segments → canonical DS parent name.
- * Conservative: only words distinctive enough to reduce false-positive risk.
- * Generic words (Button, Input, Text, Icon, List…) are deliberately excluded.
- */
 export const DS_NAME_SEGMENTS: Record<string, string> = {
-  // MUI
-  Card:         'MuiCard',
-  Slider:       'MuiSlider',
-  Rating:       'MuiRating',
-  Chip:         'MuiChip',
-  Badge:        'MuiBadge',
-  Dialog:       'MuiDialog',
-  Accordion:    'MuiAccordion',
-  Drawer:       'MuiDrawer',
-  Pagination:   'MuiPagination',
-  Snackbar:     'MuiSnackbar',
-  Skeleton:     'MuiSkeleton',
-  Stepper:      'MuiStepper',
-  Tooltip:      'MuiTooltip',
-  Breadcrumbs:  'MuiBreadcrumbs',
-  // Carbon
-  Tag:          'Tag',
-  Tile:         'Tile',
-  Dropdown:     'Dropdown',
+  ...CARBON_PROFILE.nameSegments,
+  ...MUI_PROFILE.nameSegments,
 };
 
 export interface SubComponentMatch {
@@ -408,31 +307,10 @@ export interface SubComponentMatch {
 
 // ── Phase 3: prop-signature matching ─────────────────────────────────────────
 
-// Key props for each Carbon component. Only include props that are
-// distinctive — broad enough to catch forks, tight enough to avoid
-// false positives on unrelated components that share a common prop name.
+/** Merged compatibility view over the built-in profiles' prop signatures. */
 export const DS_PROP_SIGNATURES: Record<string, string[]> = {
-  Button:              ['kind', 'size', 'disabled', 'renderIcon', 'iconDescription'],
-  IconButton:          ['label', 'kind', 'size', 'onClick', 'disabled'],
-  Tag:                 ['type', 'filter', 'onClose', 'size'],
-  Tile:                ['light', 'href', 'clicked'],
-  Modal:               ['open', 'onRequestClose', 'modalHeading', 'primaryButtonText', 'secondaryButtonText'],
-  TextInput:           ['id', 'labelText', 'value', 'onChange', 'placeholder', 'invalid', 'invalidText'],
-  NumberInput:         ['value', 'onChange', 'min', 'max', 'step', 'label', 'invalidText'],
-  Select:              ['id', 'labelText', 'value', 'onChange', 'disabled'],
-  Dropdown:            ['id', 'label', 'items', 'onChange', 'selectedItem'],
-  Checkbox:            ['id', 'labelText', 'checked', 'onChange', 'disabled', 'indeterminate'],
-  Toggle:              ['id', 'labelText', 'toggled', 'onToggle', 'disabled'],
-  InlineNotification:  ['kind', 'title', 'subtitle', 'onCloseButtonClick', 'actions', 'lowContrast'],
-  OverflowMenu:        ['flipped', 'renderIcon', 'iconDescription', 'selectorPrimaryFocus'],
-  ProgressBar:         ['value', 'max', 'label', 'status'],
-  DataTable:           ['rows', 'headers', 'render'],
-  // Material UI
-  MuiSlider:           ['value', 'onChange', 'min', 'max', 'step', 'marks', 'valueLabelDisplay', 'disabled'],
-  MuiRating:           ['value', 'onChange', 'precision', 'max', 'size', 'readOnly', 'disabled'],
-  MuiChip:             ['label', 'onDelete', 'color', 'size', 'variant', 'icon', 'disabled'],
-  MuiBadge:            ['badgeContent', 'color', 'overlap', 'anchorOrigin', 'invisible', 'max'],
-  MuiSelect:           ['value', 'onChange', 'label', 'multiple', 'renderValue', 'disabled'],
+  ...CARBON_PROFILE.propSignatures,
+  ...MUI_PROFILE.propSignatures,
 };
 
 export interface PropMatch {
@@ -447,6 +325,11 @@ export interface InlineDriftResult {
   tokenFingerprints: TokenFingerprint[];
   propMatches: PropMatch[];
   subComponentMatches: SubComponentMatch[];
+  /**
+   * 1-based definition line per top-level component seen in the file. Every inline
+   * signal keys on the local component name, so one map locates all four.
+   */
+  componentLines: Record<string, number>;
 }
 
 function nodeRange(n: { start?: number | null; end?: number | null }): [number, number] | null {
@@ -454,7 +337,10 @@ function nodeRange(n: { start?: number | null; end?: number | null }): [number, 
   return [n.start, n.end];
 }
 
-function scanBodyForTokens(bodyText: string): { tokens: string[]; classNames: string[] } {
+function scanBodyForTokens(
+  bodyText: string,
+  profile: DetectionProfile,
+): { tokens: string[]; classNames: string[] } {
   const tokens: string[] = [];
   const classNames: string[] = [];
 
@@ -462,17 +348,14 @@ function scanBodyForTokens(bodyText: string): { tokens: string[]; classNames: st
   let m: RegExpExecArray | null;
   while ((m = HEX_COLOR_RE.exec(bodyText)) !== null) {
     const hex = m[0].toLowerCase();
-    if ((CARBON_TOKENS[hex] || MUI_TOKENS[hex]) && !tokens.includes(hex)) tokens.push(hex);
+    if (profile.tokens[hex] && !tokens.includes(hex)) tokens.push(hex);
   }
 
-  CDS_CLASS_RE.lastIndex = 0;
-  while ((m = CDS_CLASS_RE.exec(bodyText)) !== null) {
-    if (!classNames.includes(m[0])) classNames.push(m[0]);
-  }
-
-  MUI_CLASS_RE.lastIndex = 0;
-  while ((m = MUI_CLASS_RE.exec(bodyText)) !== null) {
-    if (!classNames.includes(m[0])) classNames.push(m[0]);
+  for (const classRe of profile.classPatterns) {
+    classRe.lastIndex = 0; // shared /g regexes — reset between scans
+    while ((m = classRe.exec(bodyText)) !== null) {
+      if (!classNames.includes(m[0])) classNames.push(m[0]);
+    }
   }
 
   return { tokens, classNames };
@@ -495,11 +378,11 @@ function extractPropNames(params: readonly unknown[]): string[] {
 const PROP_MATCH_THRESHOLD = 0.6;
 const PROP_MATCH_MIN_OVERLAP = 2;
 
-function findPropMatch(localProps: string[]): PropMatch | null {
+function findPropMatch(localProps: string[], propSignatures: Record<string, string[]>): PropMatch | null {
   if (localProps.length === 0) return null;
   const localSet = new Set(localProps);
   let best: PropMatch | null = null;
-  for (const [dsName, dsProps] of Object.entries(DS_PROP_SIGNATURES)) {
+  for (const [dsName, dsProps] of Object.entries(propSignatures)) {
     const matched = dsProps.filter(p => localSet.has(p));
     const score = matched.length / dsProps.length;
     if (
@@ -535,6 +418,7 @@ function splitPascal(name: string): string[] {
 function findSubComponentMatch(
   componentName: string,
   bodyText: string,
+  profile: DetectionProfile,
 ): SubComponentMatch | null {
   const jsxElements = extractJsxElements(bodyText);
   const jsxSet = new Set(jsxElements);
@@ -544,7 +428,7 @@ function findSubComponentMatch(
   // — skip it. Only flag when sub-components appear without their parent.
   const parentUsages = new Map<string, string[]>();
   for (const el of jsxElements) {
-    const parent = DS_SUBCOMPONENT_MAP[el];
+    const parent = profile.subComponentMap[el];
     if (!parent) continue;
     const parentElement = parent.startsWith('Mui') ? parent.slice(3) : parent;
     if (jsxSet.has(parentElement)) continue; // real parent present — not a reimplementation
@@ -554,10 +438,10 @@ function findSubComponentMatch(
 
   if (parentUsages.size === 0) return null;
 
-  // Name-contains: check each PascalCase word segment against DS_NAME_SEGMENTS
+  // Name-contains: check each PascalCase word segment against the profile's segments
   const words = splitPascal(componentName);
   const nameHit = words
-    .map(w => ({ word: w, ds: DS_NAME_SEGMENTS[w] }))
+    .map(w => ({ word: w, ds: profile.nameSegments[w] }))
     .find(({ ds }) => ds !== undefined);
 
   // Pick best match: prefer parent with both signals, then most sub-components
@@ -581,23 +465,35 @@ export function checkInlineDrift(
   fileContent: string,
   dsExports: Set<string>,
   filename?: string,
+  profile?: DetectionProfile,
 ): InlineDriftResult {
+  // Without a profile we can't know which DS the repo uses, so fall back to every
+  // built-in. Callers that know the config should pass a profile (checkDriftFull does).
+  const p = profile ?? allBuiltinProfiles();
   const isTsx = filename?.endsWith('.tsx') ?? false;
   if (!isTsx && !isComponentFile(fileContent)) {
-    return { localShadows: [], tokenFingerprints: [], propMatches: [], subComponentMatches: [] };
+    return emptyInlineDrift();
   }
+  const ast = parseSource(fileContent);
+  if (!ast) return emptyInlineDrift();
+  return checkInlineDriftAst(ast, fileContent, dsExports, p);
+}
 
-  let ast;
-  try {
-    ast = parse(fileContent, BABEL_OPTIONS);
-  } catch {
-    return { localShadows: [], tokenFingerprints: [], propMatches: [], subComponentMatches: [] };
-  }
+function emptyInlineDrift(): InlineDriftResult {
+  return { localShadows: [], tokenFingerprints: [], propMatches: [], subComponentMatches: [], componentLines: {} };
+}
 
+function checkInlineDriftAst(
+  ast: Ast,
+  fileContent: string,
+  dsExports: Set<string>,
+  p: DetectionProfile,
+): InlineDriftResult {
   const localShadows: string[] = [];
   const tokenFingerprints: TokenFingerprint[] = [];
   const propMatches: PropMatch[] = [];
   const subComponentMatches: SubComponentMatch[] = [];
+  const componentLines: Record<string, number> = {};
 
   for (const topNode of ast.program.body) {
     // Unwrap `export function Foo` / `export const Foo = ...`
@@ -609,11 +505,13 @@ export function checkInlineDrift(
     let componentName: string | null = null;
     let bodyRange: [number, number] | null = null;
     let funcParams: readonly unknown[] = [];
+    let definitionLine: number | undefined;
 
     if (node.type === 'FunctionDeclaration' && node.id && /^[A-Z]/.test(node.id.name)) {
       componentName = node.id.name;
       bodyRange = nodeRange(node.body);
       funcParams = node.params;
+      definitionLine = node.loc?.start.line;
     } else if (node.type === 'VariableDeclaration') {
       for (const decl of node.declarations) {
         if (decl.id.type !== 'Identifier') continue;
@@ -624,21 +522,23 @@ export function checkInlineDrift(
           componentName = name;
           bodyRange = nodeRange(init.body);
           funcParams = init.params;
+          definitionLine = decl.loc?.start.line;
         }
       }
     }
 
     if (!componentName) continue;
+    if (definitionLine !== undefined) componentLines[componentName] = definitionLine;
 
     // Signal 1: name shadows a DS export
     if (dsExports.size > 0 && dsExports.has(componentName)) {
       localShadows.push(componentName);
     }
 
-    // Signal 2: function body contains Carbon token values or cds-- class names
+    // Signal 2: function body contains DS token values or DS class names
     if (bodyRange) {
       const bodyText = fileContent.slice(bodyRange[0], bodyRange[1]);
-      const { tokens, classNames } = scanBodyForTokens(bodyText);
+      const { tokens, classNames } = scanBodyForTokens(bodyText, p);
       if (tokens.length > 0 || classNames.length > 0) {
         tokenFingerprints.push({ componentName, tokens, classNames });
       }
@@ -646,7 +546,7 @@ export function checkInlineDrift(
 
     // Signal 3: prop signature matches a DS component's known API
     const localProps = extractPropNames(funcParams);
-    const match = findPropMatch(localProps);
+    const match = findPropMatch(localProps, p.propSignatures);
     if (match) {
       propMatches.push({ ...match, componentName });
     }
@@ -654,22 +554,50 @@ export function checkInlineDrift(
     // Signal 4: sub-component usage (without real parent) + name-contains
     if (bodyRange) {
       const bodyText = fileContent.slice(bodyRange[0], bodyRange[1]);
-      const subMatch = findSubComponentMatch(componentName, bodyText);
+      const subMatch = findSubComponentMatch(componentName, bodyText, p);
       if (subMatch) {
         subComponentMatches.push(subMatch);
       }
     }
   }
 
-  return { localShadows, tokenFingerprints, propMatches, subComponentMatches };
+  return { localShadows, tokenFingerprints, propMatches, subComponentMatches, componentLines };
 }
 
 // ── Combined result ───────────────────────────────────────────────────────────
 
 export interface FullDriftResult {
-  importDrift: { count: number; symbols: string[] };
+  importDrift: {
+    count: number;
+    symbols: string[];
+    /** 1-based source line per entry in `symbols`. */
+    lines: Record<string, number>;
+  };
   inlineDrift: InlineDriftResult;
   totalCount: number;
+}
+
+const EMPTY_DRIFT_FULL = (): FullDriftResult => ({
+  importDrift: { count: 0, symbols: [], lines: {} },
+  inlineDrift: emptyInlineDrift(),
+  totalCount: 0,
+});
+
+function combineDrift(importDrift: ImportDriftCheck, inlineDrift: InlineDriftResult): FullDriftResult {
+  const inlineCount =
+    inlineDrift.localShadows.length +
+    inlineDrift.tokenFingerprints.length +
+    inlineDrift.propMatches.length +
+    inlineDrift.subComponentMatches.length;
+  return {
+    importDrift: {
+      count: importDrift.driftCount,
+      symbols: importDrift.driftedSymbols,
+      lines: importDrift.lines,
+    },
+    inlineDrift,
+    totalCount: importDrift.driftCount + inlineCount,
+  };
 }
 
 export function checkDriftFull(
@@ -678,19 +606,57 @@ export function checkDriftFull(
   canonicalPkgs: string[],
   allowlist: string[],
   filename?: string,
+  profile?: DetectionProfile,
 ): FullDriftResult {
-  const { driftCount, driftedSymbols } = checkDrift(
-    fileContent, dsExports, canonicalPkgs, allowlist, filename,
+  // Parsing dominates the cost of a scan, so the file is parsed exactly once and the
+  // same AST feeds both the import walk and the inline walk.
+  const isTsx = filename?.endsWith('.tsx') ?? false;
+  if (!isTsx && !isComponentFile(fileContent)) return EMPTY_DRIFT_FULL();
+  const ast = parseSource(fileContent);
+  if (!ast) return EMPTY_DRIFT_FULL();
+  // Inline detection is DS-specific: only the profiles for the configured packages
+  // apply (plus custom config data when the caller built the profile from config).
+  const p = profile ?? buildDetectionProfile(canonicalPkgs);
+  return combineDrift(
+    checkDriftAst(ast, dsExports, canonicalPkgs, allowlist),
+    checkInlineDriftAst(ast, fileContent, dsExports, p),
   );
-  const inlineDrift = checkInlineDrift(fileContent, dsExports, filename);
-  const inlineCount =
-    inlineDrift.localShadows.length +
-    inlineDrift.tokenFingerprints.length +
-    inlineDrift.propMatches.length +
-    inlineDrift.subComponentMatches.length;
-  return {
-    importDrift: { count: driftCount, symbols: driftedSymbols },
-    inlineDrift,
-    totalCount: driftCount + inlineCount,
-  };
+}
+
+export interface FileAnalysis {
+  drift: FullDriftResult;
+  /** Canonical DS usages in the file (see countCanonicalUsages). */
+  canonicalUsages: number;
+}
+
+/**
+ * Drift + canonical-usage count off a single parse. This is the entry point for the
+ * CI comment path, which needs both per file (head and base versions) — calling
+ * checkDriftFull and countCanonicalUsages separately would parse everything twice.
+ */
+export function analyzeFile(
+  fileContent: string,
+  dsExports: Set<string>,
+  canonicalPkgs: string[],
+  allowlist: string[],
+  filename?: string,
+  profile?: DetectionProfile,
+): FileAnalysis {
+  // No component prefilter before parsing: canonical usage counts in ANY source file
+  // (a util importing from the DS package is adoption too), matching
+  // countCanonicalUsages. The drift checks below keep their own prefilter.
+  const ast = parseSource(fileContent);
+  if (!ast) return { drift: EMPTY_DRIFT_FULL(), canonicalUsages: 0 };
+
+  const canonicalUsages = countCanonicalUsagesAst(ast, dsExports, canonicalPkgs);
+  const isTsx = filename?.endsWith('.tsx') ?? false;
+  if (!isTsx && !isComponentFile(fileContent)) {
+    return { drift: EMPTY_DRIFT_FULL(), canonicalUsages };
+  }
+  const p = profile ?? buildDetectionProfile(canonicalPkgs);
+  const drift = combineDrift(
+    checkDriftAst(ast, dsExports, canonicalPkgs, allowlist),
+    checkInlineDriftAst(ast, fileContent, dsExports, p),
+  );
+  return { drift, canonicalUsages };
 }
