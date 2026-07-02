@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { resolveExports, isComponentFile, checkDrift, checkInlineDrift, checkDriftFull, CARBON_TOKENS, DS_PROP_SIGNATURES } from '../src/parser';
+import { resolveExports, isComponentFile, checkDrift, checkInlineDrift, checkDriftFull, analyzeFile, countCanonicalUsages, CARBON_TOKENS, DS_PROP_SIGNATURES } from '../src/parser';
 import { CARBON_PROFILE } from '../src/profiles';
 
 const CANONICAL = ['@acme/ds'];
@@ -385,6 +385,36 @@ describe('checkDriftFull', () => {
     expect(result.inlineDrift.tokenFingerprints).toHaveLength(1);
     expect(result.inlineDrift.tokenFingerprints[0].tokens).toContain('#0f62fe');
     expect(result.inlineDrift.tokenFingerprints[0].classNames).toContain('cds--tile');
+  });
+});
+
+// analyzeFile is the single-parse entry point the CI comment path uses; its output
+// must match running checkDriftFull + countCanonicalUsages separately.
+describe('analyzeFile', () => {
+  it('matches checkDriftFull + countCanonicalUsages on a component file', () => {
+    const content = `
+      import { Button } from '@acme/ds';
+      import { Modal } from './local/Modal';
+      export function Page() { return <Modal><Button /></Modal>; }
+    `;
+    const combined = analyzeFile(content, DS_EXPORTS, CANONICAL, [], 'Page.tsx');
+    expect(combined.drift).toEqual(checkDriftFull(content, DS_EXPORTS, CANONICAL, [], 'Page.tsx'));
+    expect(combined.canonicalUsages).toBe(countCanonicalUsages(content, DS_EXPORTS, CANONICAL));
+    expect(combined.canonicalUsages).toBe(1); // Button from the canonical package
+    expect(combined.drift.importDrift.count).toBe(1); // Modal from a local path
+  });
+
+  it('still counts canonical usage in a non-component .ts file (drift prefilter skips)', () => {
+    const content = `import { useToggle } from '@acme/ds';\nexport const x = useToggle;\n`;
+    const combined = analyzeFile(content, DS_EXPORTS, CANONICAL, [], 'util.ts');
+    expect(combined.drift.totalCount).toBe(0);
+    expect(combined.canonicalUsages).toBe(1);
+  });
+
+  it('unparseable content → empty result, no throw', () => {
+    const combined = analyzeFile('@@@ nope !!!', DS_EXPORTS, CANONICAL, [], 'bad.tsx');
+    expect(combined.drift.totalCount).toBe(0);
+    expect(combined.canonicalUsages).toBe(0);
   });
 });
 

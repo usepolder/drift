@@ -16,6 +16,17 @@ const BABEL_OPTIONS: ParserOptions = {
   errorRecovery: true,
 };
 
+type Ast = ReturnType<typeof parse>;
+
+/** Parse once; null when @babel/parser can't parse even with errorRecovery. */
+function parseSource(fileContent: string): Ast | null {
+  try {
+    return parse(fileContent, BABEL_OPTIONS);
+  } catch {
+    return null;
+  }
+}
+
 // Matches `export * from './path'` and `export { X } from './path'`
 const REEXPORT_RE = /export\s+(?:\*|\{[^}]*\})\s+from\s+['"]([^'"]+)['"]/g;
 
@@ -145,15 +156,17 @@ export function checkDrift(
   if (!isTsx && !isComponentFile(fileContent)) {
     return { driftCount: 0, driftedSymbols: [], lines: {} };
   }
+  const ast = parseSource(fileContent);
+  if (!ast) return { driftCount: 0, driftedSymbols: [], lines: {} };
+  return checkDriftAst(ast, dsExports, canonicalPkgs, allowlist);
+}
 
-  let ast;
-  try {
-    ast = parse(fileContent, BABEL_OPTIONS);
-  } catch {
-    // @babel/parser couldn't parse this file even with errorRecovery
-    return { driftCount: 0, driftedSymbols: [], lines: {} };
-  }
-
+function checkDriftAst(
+  ast: Ast,
+  dsExports: Set<string>,
+  canonicalPkgs: string[],
+  allowlist: string[],
+): ImportDriftCheck {
   const driftedSymbols: string[] = [];
   const lines: Record<string, number> = {};
 
@@ -222,13 +235,12 @@ export function countCanonicalUsages(
   dsExports: Set<string>,
   canonicalPkgs: string[],
 ): number {
-  let ast;
-  try {
-    ast = parse(fileContent, BABEL_OPTIONS);
-  } catch {
-    return 0;
-  }
+  const ast = parseSource(fileContent);
+  if (!ast) return 0;
+  return countCanonicalUsagesAst(ast, dsExports, canonicalPkgs);
+}
 
+function countCanonicalUsagesAst(ast: Ast, dsExports: Set<string>, canonicalPkgs: string[]): number {
   let count = 0;
   for (const node of ast.program.body) {
     if (node.type !== 'ImportDeclaration') continue;
@@ -458,21 +470,25 @@ export function checkInlineDrift(
   // Without a profile we can't know which DS the repo uses, so fall back to every
   // built-in. Callers that know the config should pass a profile (checkDriftFull does).
   const p = profile ?? allBuiltinProfiles();
-  const empty = (): InlineDriftResult => ({
-    localShadows: [], tokenFingerprints: [], propMatches: [], subComponentMatches: [], componentLines: {},
-  });
   const isTsx = filename?.endsWith('.tsx') ?? false;
   if (!isTsx && !isComponentFile(fileContent)) {
-    return empty();
+    return emptyInlineDrift();
   }
+  const ast = parseSource(fileContent);
+  if (!ast) return emptyInlineDrift();
+  return checkInlineDriftAst(ast, fileContent, dsExports, p);
+}
 
-  let ast;
-  try {
-    ast = parse(fileContent, BABEL_OPTIONS);
-  } catch {
-    return empty();
-  }
+function emptyInlineDrift(): InlineDriftResult {
+  return { localShadows: [], tokenFingerprints: [], propMatches: [], subComponentMatches: [], componentLines: {} };
+}
 
+function checkInlineDriftAst(
+  ast: Ast,
+  fileContent: string,
+  dsExports: Set<string>,
+  p: DetectionProfile,
+): InlineDriftResult {
   const localShadows: string[] = [];
   const tokenFingerprints: TokenFingerprint[] = [];
   const propMatches: PropMatch[] = [];
@@ -561,6 +577,29 @@ export interface FullDriftResult {
   totalCount: number;
 }
 
+const EMPTY_DRIFT_FULL = (): FullDriftResult => ({
+  importDrift: { count: 0, symbols: [], lines: {} },
+  inlineDrift: emptyInlineDrift(),
+  totalCount: 0,
+});
+
+function combineDrift(importDrift: ImportDriftCheck, inlineDrift: InlineDriftResult): FullDriftResult {
+  const inlineCount =
+    inlineDrift.localShadows.length +
+    inlineDrift.tokenFingerprints.length +
+    inlineDrift.propMatches.length +
+    inlineDrift.subComponentMatches.length;
+  return {
+    importDrift: {
+      count: importDrift.driftCount,
+      symbols: importDrift.driftedSymbols,
+      lines: importDrift.lines,
+    },
+    inlineDrift,
+    totalCount: importDrift.driftCount + inlineCount,
+  };
+}
+
 export function checkDriftFull(
   fileContent: string,
   dsExports: Set<string>,
@@ -569,22 +608,55 @@ export function checkDriftFull(
   filename?: string,
   profile?: DetectionProfile,
 ): FullDriftResult {
-  const { driftCount, driftedSymbols, lines } = checkDrift(
-    fileContent, dsExports, canonicalPkgs, allowlist, filename,
-  );
+  // Parsing dominates the cost of a scan, so the file is parsed exactly once and the
+  // same AST feeds both the import walk and the inline walk.
+  const isTsx = filename?.endsWith('.tsx') ?? false;
+  if (!isTsx && !isComponentFile(fileContent)) return EMPTY_DRIFT_FULL();
+  const ast = parseSource(fileContent);
+  if (!ast) return EMPTY_DRIFT_FULL();
   // Inline detection is DS-specific: only the profiles for the configured packages
   // apply (plus custom config data when the caller built the profile from config).
-  const inlineDrift = checkInlineDrift(
-    fileContent, dsExports, filename, profile ?? buildDetectionProfile(canonicalPkgs),
+  const p = profile ?? buildDetectionProfile(canonicalPkgs);
+  return combineDrift(
+    checkDriftAst(ast, dsExports, canonicalPkgs, allowlist),
+    checkInlineDriftAst(ast, fileContent, dsExports, p),
   );
-  const inlineCount =
-    inlineDrift.localShadows.length +
-    inlineDrift.tokenFingerprints.length +
-    inlineDrift.propMatches.length +
-    inlineDrift.subComponentMatches.length;
-  return {
-    importDrift: { count: driftCount, symbols: driftedSymbols, lines },
-    inlineDrift,
-    totalCount: driftCount + inlineCount,
-  };
+}
+
+export interface FileAnalysis {
+  drift: FullDriftResult;
+  /** Canonical DS usages in the file (see countCanonicalUsages). */
+  canonicalUsages: number;
+}
+
+/**
+ * Drift + canonical-usage count off a single parse. This is the entry point for the
+ * CI comment path, which needs both per file (head and base versions) — calling
+ * checkDriftFull and countCanonicalUsages separately would parse everything twice.
+ */
+export function analyzeFile(
+  fileContent: string,
+  dsExports: Set<string>,
+  canonicalPkgs: string[],
+  allowlist: string[],
+  filename?: string,
+  profile?: DetectionProfile,
+): FileAnalysis {
+  // No component prefilter before parsing: canonical usage counts in ANY source file
+  // (a util importing from the DS package is adoption too), matching
+  // countCanonicalUsages. The drift checks below keep their own prefilter.
+  const ast = parseSource(fileContent);
+  if (!ast) return { drift: EMPTY_DRIFT_FULL(), canonicalUsages: 0 };
+
+  const canonicalUsages = countCanonicalUsagesAst(ast, dsExports, canonicalPkgs);
+  const isTsx = filename?.endsWith('.tsx') ?? false;
+  if (!isTsx && !isComponentFile(fileContent)) {
+    return { drift: EMPTY_DRIFT_FULL(), canonicalUsages };
+  }
+  const p = profile ?? buildDetectionProfile(canonicalPkgs);
+  const drift = combineDrift(
+    checkDriftAst(ast, dsExports, canonicalPkgs, allowlist),
+    checkInlineDriftAst(ast, fileContent, dsExports, p),
+  );
+  return { drift, canonicalUsages };
 }
