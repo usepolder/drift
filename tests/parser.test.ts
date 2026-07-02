@@ -3,6 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { resolveExports, isComponentFile, checkDrift, checkInlineDrift, checkDriftFull, CARBON_TOKENS, DS_PROP_SIGNATURES } from '../src/parser';
+import { CARBON_PROFILE } from '../src/profiles';
 
 const CANONICAL = ['@acme/ds'];
 const DS_EXPORTS = new Set(['Button', 'Modal', 'useToggle', 'Skeleton']);
@@ -328,7 +329,9 @@ describe('checkDriftFull', () => {
       }
       export function Page() { return <Modal><Button /></Modal>; }
     `;
-    const result = checkDriftFull(content, DS_EXPORTS, CANONICAL, [], 'Page.tsx');
+    // '@acme/ds' matches no built-in profile, so Carbon token detection is opted
+    // into explicitly here.
+    const result = checkDriftFull(content, DS_EXPORTS, CANONICAL, [], 'Page.tsx', CARBON_PROFILE);
     // Button import from local → importDrift count 1
     // Modal locally defined shadow → localShadow
     // Modal body has #da1e28 → tokenFingerprint
@@ -336,6 +339,37 @@ describe('checkDriftFull', () => {
     expect(result.inlineDrift.localShadows).toContain('Modal');
     expect(result.inlineDrift.tokenFingerprints[0].tokens).toContain('#da1e28');
     expect(result.totalCount).toBeGreaterThan(1);
+  });
+
+  it('unknown component_library without a profile → export-based rules only', () => {
+    const content = `
+      import { Button } from '../components/Button';
+      function Modal({ children }: { children: React.ReactNode }) {
+        return <div style={{ color: '#da1e28' }}>{children}</div>;
+      }
+      export function Page() { return <Modal><Button /></Modal>; }
+    `;
+    // No profile derives from '@acme/ds', so the Carbon hex must NOT be flagged
+    // (it would carry a misleading Carbon token label). Import drift and the DS-export
+    // shadow still fire — they need no profile.
+    const result = checkDriftFull(content, DS_EXPORTS, CANONICAL, [], 'Page.tsx');
+    expect(result.importDrift.count).toBe(1);
+    expect(result.inlineDrift.localShadows).toContain('Modal');
+    expect(result.inlineDrift.tokenFingerprints).toHaveLength(0);
+    expect(result.inlineDrift.propMatches).toHaveLength(0);
+  });
+
+  it('carbon canonical package → carbon profile derived automatically', () => {
+    const content = `
+      function PromoTile() {
+        return <div className="cds--tile" style={{ color: '#0f62fe' }} />;
+      }
+      export function Page() { return <PromoTile />; }
+    `;
+    const result = checkDriftFull(content, DS_EXPORTS, ['@carbon/react'], [], 'Page.tsx');
+    expect(result.inlineDrift.tokenFingerprints).toHaveLength(1);
+    expect(result.inlineDrift.tokenFingerprints[0].tokens).toContain('#0f62fe');
+    expect(result.inlineDrift.tokenFingerprints[0].classNames).toContain('cds--tile');
   });
 });
 

@@ -7,6 +7,7 @@ import { resolveConfig, type ResolvedConfig } from './resolve-config';
 import { resolveExports, checkDriftFull, type FullDriftResult } from './parser';
 import { flattenFindings, RULE_LABEL, type Finding } from './comment/findings';
 import { loadSuppressions, applySuppressions, type SuppressRules } from './comment/suppress';
+import { buildDetectionProfile } from './profiles';
 import { runInitSubcommand } from './commands/init';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
@@ -243,6 +244,9 @@ export function buildReport(
   // clean PR comment, so the CLI cannot skip suppression.
   const rules = suppress ?? loadSuppressions(cwd);
   const dsExports = resolveDsExports(config, cwd);
+  // Built once per run: built-in data for the configured DS packages plus any custom
+  // tokens/signatures from .polder.yml (PolderConfig extends CustomDetection).
+  const profile = buildDetectionProfile(config.componentLibrary, config);
   const fileReports: CliFileReport[] = [];
   let suppressedSignals = 0;
 
@@ -261,6 +265,7 @@ export function buildReport(
       config.componentLibrary,
       config.allowlist,
       filename,
+      profile,
     );
 
     const all = flattenFindings(filename, result);

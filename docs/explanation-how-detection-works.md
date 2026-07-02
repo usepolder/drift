@@ -114,11 +114,14 @@ confident gets trusted.
 
 Every one of those choices gives something up. Named honestly:
 
-- **Coverage is dictionary-bound.** Token, prop, and sub-component detection currently
-  ships Carbon and MUI knowledge. Other design systems get the import-drift and
-  local-shadow rules (which are library-agnostic) but not the heuristic look-alike
-  rules until their dictionaries are added. This is a deliberate precision-over-recall
-  trade: better to miss some drift than to flood the comment.
+- **Coverage is dictionary-bound.** Token, prop, and sub-component detection run off a
+  per-run [detection profile](reference-configuration.md#detection-profiles): built-in
+  knowledge ships for Carbon and MUI (applied only when that DS is configured), and
+  other design systems supply their own dictionaries via the `tokens`,
+  `class_prefixes`, `prop_signatures`, `sub_components`, and `name_segments` config
+  keys. Without either, a repo gets the import-drift and local-shadow rules (which are
+  library-agnostic) but not the heuristic look-alike rules. This is a deliberate
+  precision-over-recall trade: better to miss some drift than to flood the comment.
 - **The heuristic fallback is blunt.** Without `node_modules`, import drift degrades to
   "flag any PascalCase local import" and local-shadow turns off entirely. Installing
   dependencies before a run restores exact matching.

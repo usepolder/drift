@@ -4144,6 +4144,7 @@ const resolve_config_1 = __nccwpck_require__(190);
 const parser_1 = __nccwpck_require__(196);
 const findings_1 = __nccwpck_require__(363);
 const suppress_1 = __nccwpck_require__(10);
+const profiles_1 = __nccwpck_require__(717);
 const init_1 = __nccwpck_require__(722);
 const SOURCE_RE = /\.(ts|tsx|js|jsx)$/;
 const TOP_HELP = `polder-drift — design system drift detection
@@ -4318,6 +4319,9 @@ function buildReport(config, cwd, files, effectiveFailOnDrift, suppress) {
     // clean PR comment, so the CLI cannot skip suppression.
     const rules = suppress ?? (0, suppress_1.loadSuppressions)(cwd);
     const dsExports = resolveDsExports(config, cwd);
+    // Built once per run: built-in data for the configured DS packages plus any custom
+    // tokens/signatures from .polder.yml (PolderConfig extends CustomDetection).
+    const profile = (0, profiles_1.buildDetectionProfile)(config.componentLibrary, config);
     const fileReports = [];
     let suppressedSignals = 0;
     for (const filename of files) {
@@ -4330,7 +4334,7 @@ function buildReport(config, cwd, files, effectiveFailOnDrift, suppress) {
             process.stderr.write(`polder-drift: could not read ${filename} — skipping\n`);
             continue;
         }
-        const result = (0, parser_1.checkDriftFull)(content, dsExports, config.componentLibrary, config.allowlist, filename);
+        const result = (0, parser_1.checkDriftFull)(content, dsExports, config.componentLibrary, config.allowlist, filename, profile);
         const all = (0, findings_1.flattenFindings)(filename, result);
         const kept = (0, suppress_1.applySuppressions)(all, rules);
         suppressedSignals += all.length - kept.length;
@@ -4669,7 +4673,7 @@ function analyzePr(p) {
         const content = p.readCurrent(file);
         if (content == null)
             continue;
-        const res = (0, parser_1.checkDriftFull)(content, p.dsExports, p.canonicalPkgs, p.allowlist, file);
+        const res = (0, parser_1.checkDriftFull)(content, p.dsExports, p.canonicalPkgs, p.allowlist, file, p.profile);
         findings.push(...(0, findings_1.flattenFindings)(file, res));
         canonicalUsages += (0, parser_1.countCanonicalUsages)(content, p.dsExports, p.canonicalPkgs);
     }
@@ -4697,7 +4701,7 @@ function analyzePr(p) {
             const base = p.readBase(file);
             if (base == null)
                 continue;
-            const res = (0, parser_1.checkDriftFull)(base, p.dsExports, p.canonicalPkgs, p.allowlist, file);
+            const res = (0, parser_1.checkDriftFull)(base, p.dsExports, p.canonicalPkgs, p.allowlist, file, p.profile);
             // Suppress base findings the same way head findings are (analyze above), so the
             // adoption delta compares like with like and .polderignore doesn't fake a gain.
             const ff = (0, suppress_1.applySuppressions)((0, findings_1.flattenFindings)(file, res), p.suppress);
@@ -5077,6 +5081,17 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.parseConfig = parseConfig;
 exports.readConfig = readConfig;
 const yaml = __importStar(__nccwpck_require__(281));
+const HEX_RE = /^#[0-9a-f]{6}$/;
+function requireStringMap(value, key) {
+    if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+        throw new Error(`${key} must be a mapping of strings to strings`);
+    }
+    for (const [k, v] of Object.entries(value)) {
+        if (typeof v !== 'string')
+            throw new Error(`${key}.${k} must be a string`);
+    }
+    return value;
+}
 function parseConfig(raw) {
     let parsed;
     try {
@@ -5108,13 +5123,56 @@ function parseConfig(raw) {
     else {
         throw new Error('component_library must be a string or array of strings');
     }
-    return {
+    const config = {
         componentLibrary,
         // Keep only string entries; a non-string allowlist value is ignored rather than
         // crashing later string operations.
         allowlist: Array.isArray(cfg.allowlist) ? cfg.allowlist.filter((x) => typeof x === 'string') : [],
         failOnDrift: cfg.fail_on_drift === true,
     };
+    // Custom detection data. Malformed entries throw (rather than being dropped) —
+    // a silently-ignored typo here would look like the rule simply not working.
+    if (cfg.tokens !== undefined) {
+        const tokens = {};
+        for (const [k, v] of Object.entries(requireStringMap(cfg.tokens, 'tokens'))) {
+            const hex = k.toLowerCase();
+            if (!HEX_RE.test(hex)) {
+                throw new Error(`tokens keys must be 6-digit hex colors like "#0f62fe" (got "${k}")`);
+            }
+            tokens[hex] = v;
+        }
+        config.tokens = tokens;
+    }
+    if (cfg.class_prefixes !== undefined) {
+        if (!Array.isArray(cfg.class_prefixes) || !cfg.class_prefixes.every((x) => typeof x === 'string' && x.length > 0)) {
+            throw new Error('class_prefixes must be an array of non-empty strings');
+        }
+        config.classPrefixes = cfg.class_prefixes;
+    }
+    if (cfg.prop_signatures !== undefined) {
+        if (typeof cfg.prop_signatures !== 'object' || cfg.prop_signatures === null || Array.isArray(cfg.prop_signatures)) {
+            throw new Error('prop_signatures must be a mapping of component names to prop lists');
+        }
+        const signatures = {};
+        for (const [name, props] of Object.entries(cfg.prop_signatures)) {
+            if (!Array.isArray(props) || !props.every((p) => typeof p === 'string')) {
+                throw new Error(`prop_signatures.${name} must be an array of prop names`);
+            }
+            // The matcher requires ≥2 overlapping props, so a shorter signature can never fire.
+            if (props.length < 2) {
+                throw new Error(`prop_signatures.${name} must list at least 2 props to be matchable`);
+            }
+            signatures[name] = props;
+        }
+        config.propSignatures = signatures;
+    }
+    if (cfg.sub_components !== undefined) {
+        config.subComponents = requireStringMap(cfg.sub_components, 'sub_components');
+    }
+    if (cfg.name_segments !== undefined) {
+        config.nameSegments = requireStringMap(cfg.name_segments, 'name_segments');
+    }
+    return config;
 }
 function readConfig(content) {
     if (content === null)
@@ -5262,6 +5320,7 @@ exports.checkDriftFull = checkDriftFull;
 const fs = __importStar(__nccwpck_require__(896));
 const path = __importStar(__nccwpck_require__(928));
 const parser_1 = __nccwpck_require__(429);
+const profiles_1 = __nccwpck_require__(717);
 const BABEL_OPTIONS = {
     plugins: ['typescript', 'jsx'],
     sourceType: 'module',
@@ -5460,208 +5519,52 @@ function countCanonicalUsages(fileContent, dsExports, canonicalPkgs) {
     return count;
 }
 // ── Phase 2: inline drift ─────────────────────────────────────────────────────
-// Carbon Design System v11 (White theme) — high-specificity hex tokens.
-// Values common to any UI (#fff, #ccc, generic grays) are intentionally omitted
-// to keep the false-positive rate low.
-exports.CARBON_TOKENS = {
-    '#0f62fe': 'interactive / blue-60',
-    '#0043ce': 'interactive-02 / blue-70',
-    '#002d9c': 'interactive-03 / blue-80',
-    '#161616': 'text-primary / gray-100',
-    '#da1e28': 'support-error / red-60',
-    '#198038': 'support-success / green-50',
-    '#24a148': 'support-success-hover / green-40',
-    '#f1c21b': 'support-warning / yellow-30',
-    '#ff832b': 'support-caution / orange-40',
-    '#ba4e00': 'support-caution-dark / orange-70',
-    '#4589ff': 'interactive-hover / blue-40',
-    '#007d79': 'teal-60',
-    '#08bdba': 'teal-40',
-    '#6929c4': 'purple-70',
-};
-// Material UI v5 default theme palette — high-specificity values only.
-exports.MUI_TOKENS = {
-    '#1976d2': 'primary.main',
-    '#1565c0': 'primary.dark',
-    '#42a5f5': 'primary.light',
-    '#d32f2f': 'error.main',
-    '#c62828': 'error.dark',
-    '#ef5350': 'error.light',
-    '#2e7d32': 'success.main',
-    '#388e3c': 'success.light',
-    '#1b5e20': 'success.dark',
-    '#ed6c02': 'warning.main',
-    '#e65100': 'warning.dark',
-    '#ff9800': 'warning.light',
-    '#0288d1': 'info.main',
-    '#01579b': 'info.dark',
-    '#29b6f6': 'info.light',
-};
+// The DS-specific data (tokens, class patterns, prop signatures, sub-component maps)
+// lives in ./profiles. These merged views are kept for compatibility with existing
+// importers; new code should build a DetectionProfile instead.
+exports.CARBON_TOKENS = profiles_1.CARBON_PROFILE.tokens;
+exports.MUI_TOKENS = profiles_1.MUI_PROFILE.tokens;
 const HEX_COLOR_RE = /#[0-9a-fA-F]{6}\b/g;
-const CDS_CLASS_RE = /\bcds--[a-z][a-z0-9-]*/g;
-const MUI_CLASS_RE = /\bMui[A-Z][a-zA-Z]+-[a-z][a-zA-Z0-9-]*/g;
 // ── Phase 4: sub-component usage + name-contains ─────────────────────────────
 /**
- * DS sub-components that only make sense inside their parent component.
- * Using one inside a locally-defined function body — without also using the
- * real parent DS element — is a strong signal the component reimplements
- * the parent from scratch.
- *
- * Key: JSX element name   →   Value: canonical DS parent name
+ * Merged compatibility views over the built-in profiles (see ./profiles for the
+ * per-DS data and the semantics of each map).
  */
 exports.DS_SUBCOMPONENT_MAP = {
-    // MUI — Card family
-    CardMedia: 'MuiCard',
-    CardContent: 'MuiCard',
-    CardHeader: 'MuiCard',
-    CardActions: 'MuiCard',
-    // MUI — Dialog family
-    DialogTitle: 'MuiDialog',
-    DialogContent: 'MuiDialog',
-    DialogActions: 'MuiDialog',
-    DialogContentText: 'MuiDialog',
-    // MUI — Accordion family
-    AccordionSummary: 'MuiAccordion',
-    AccordionDetails: 'MuiAccordion',
-    // MUI — List family
-    ListItemText: 'MuiList',
-    ListItemIcon: 'MuiList',
-    ListItemSecondaryAction: 'MuiList',
-    ListSubheader: 'MuiList',
-    // MUI — Stepper family
-    StepLabel: 'MuiStepper',
-    StepContent: 'MuiStepper',
-    StepIcon: 'MuiStepper',
-    // MUI — Table family
-    TableHead: 'MuiTable',
-    TableBody: 'MuiTable',
-    TableRow: 'MuiTable',
-    TableCell: 'MuiTable',
-    TableFooter: 'MuiTable',
-    TablePagination: 'MuiTable',
-    // MUI — misc
-    ImageListItem: 'MuiImageList',
-    ImageListItemBar: 'MuiImageList',
-    PaginationItem: 'MuiPagination',
-    SpeedDialAction: 'MuiSpeedDial',
-    BottomNavigationAction: 'MuiBottomNavigation',
-    TreeItem: 'MuiTreeView',
-    TimelineItem: 'MuiTimeline',
-    TimelineDot: 'MuiTimeline',
-    TimelineContent: 'MuiTimeline',
-    TimelineConnector: 'MuiTimeline',
-    TimelineSeparator: 'MuiTimeline',
-    // Carbon — Modal family
-    ModalBody: 'Modal',
-    ModalHeader: 'Modal',
-    ModalFooter: 'Modal',
-    // Carbon — DataTable family
-    TableToolbar: 'DataTable',
-    TableToolbarContent: 'DataTable',
-    TableToolbarSearch: 'DataTable',
-    TableBatchActions: 'DataTable',
-    TableSelectAll: 'DataTable',
-    TableSelectRow: 'DataTable',
-    TableExpandRow: 'DataTable',
-    TableExpandedRow: 'DataTable',
-    TableExpandHeader: 'DataTable',
-    TableContainer: 'DataTable',
-    // Carbon — Header family
-    HeaderName: 'Header',
-    HeaderNavigation: 'Header',
-    HeaderMenuItem: 'Header',
-    HeaderGlobalBar: 'Header',
-    // Carbon — SideNav family
-    SideNavItems: 'SideNav',
-    SideNavMenu: 'SideNav',
-    SideNavMenuItem: 'SideNav',
-    SideNavLink: 'SideNav',
-    // Carbon — misc
-    BreadcrumbItem: 'Breadcrumb',
-    ProgressStep: 'ProgressIndicator',
-    ContentSwitcherSwitch: 'ContentSwitcher',
-    TabList: 'Tabs',
-    TabPanels: 'Tabs',
-    TabPanel: 'Tabs',
-    NotificationActionButton: 'ActionableNotification',
+    ...profiles_1.CARBON_PROFILE.subComponentMap,
+    ...profiles_1.MUI_PROFILE.subComponentMap,
 };
-/**
- * PascalCase word segments → canonical DS parent name.
- * Conservative: only words distinctive enough to reduce false-positive risk.
- * Generic words (Button, Input, Text, Icon, List…) are deliberately excluded.
- */
 exports.DS_NAME_SEGMENTS = {
-    // MUI
-    Card: 'MuiCard',
-    Slider: 'MuiSlider',
-    Rating: 'MuiRating',
-    Chip: 'MuiChip',
-    Badge: 'MuiBadge',
-    Dialog: 'MuiDialog',
-    Accordion: 'MuiAccordion',
-    Drawer: 'MuiDrawer',
-    Pagination: 'MuiPagination',
-    Snackbar: 'MuiSnackbar',
-    Skeleton: 'MuiSkeleton',
-    Stepper: 'MuiStepper',
-    Tooltip: 'MuiTooltip',
-    Breadcrumbs: 'MuiBreadcrumbs',
-    // Carbon
-    Tag: 'Tag',
-    Tile: 'Tile',
-    Dropdown: 'Dropdown',
+    ...profiles_1.CARBON_PROFILE.nameSegments,
+    ...profiles_1.MUI_PROFILE.nameSegments,
 };
 // ── Phase 3: prop-signature matching ─────────────────────────────────────────
-// Key props for each Carbon component. Only include props that are
-// distinctive — broad enough to catch forks, tight enough to avoid
-// false positives on unrelated components that share a common prop name.
+/** Merged compatibility view over the built-in profiles' prop signatures. */
 exports.DS_PROP_SIGNATURES = {
-    Button: ['kind', 'size', 'disabled', 'renderIcon', 'iconDescription'],
-    IconButton: ['label', 'kind', 'size', 'onClick', 'disabled'],
-    Tag: ['type', 'filter', 'onClose', 'size'],
-    Tile: ['light', 'href', 'clicked'],
-    Modal: ['open', 'onRequestClose', 'modalHeading', 'primaryButtonText', 'secondaryButtonText'],
-    TextInput: ['id', 'labelText', 'value', 'onChange', 'placeholder', 'invalid', 'invalidText'],
-    NumberInput: ['value', 'onChange', 'min', 'max', 'step', 'label', 'invalidText'],
-    Select: ['id', 'labelText', 'value', 'onChange', 'disabled'],
-    Dropdown: ['id', 'label', 'items', 'onChange', 'selectedItem'],
-    Checkbox: ['id', 'labelText', 'checked', 'onChange', 'disabled', 'indeterminate'],
-    Toggle: ['id', 'labelText', 'toggled', 'onToggle', 'disabled'],
-    InlineNotification: ['kind', 'title', 'subtitle', 'onCloseButtonClick', 'actions', 'lowContrast'],
-    OverflowMenu: ['flipped', 'renderIcon', 'iconDescription', 'selectorPrimaryFocus'],
-    ProgressBar: ['value', 'max', 'label', 'status'],
-    DataTable: ['rows', 'headers', 'render'],
-    // Material UI
-    MuiSlider: ['value', 'onChange', 'min', 'max', 'step', 'marks', 'valueLabelDisplay', 'disabled'],
-    MuiRating: ['value', 'onChange', 'precision', 'max', 'size', 'readOnly', 'disabled'],
-    MuiChip: ['label', 'onDelete', 'color', 'size', 'variant', 'icon', 'disabled'],
-    MuiBadge: ['badgeContent', 'color', 'overlap', 'anchorOrigin', 'invisible', 'max'],
-    MuiSelect: ['value', 'onChange', 'label', 'multiple', 'renderValue', 'disabled'],
+    ...profiles_1.CARBON_PROFILE.propSignatures,
+    ...profiles_1.MUI_PROFILE.propSignatures,
 };
 function nodeRange(n) {
     if (n.start == null || n.end == null)
         return null;
     return [n.start, n.end];
 }
-function scanBodyForTokens(bodyText) {
+function scanBodyForTokens(bodyText, profile) {
     const tokens = [];
     const classNames = [];
     HEX_COLOR_RE.lastIndex = 0;
     let m;
     while ((m = HEX_COLOR_RE.exec(bodyText)) !== null) {
         const hex = m[0].toLowerCase();
-        if ((exports.CARBON_TOKENS[hex] || exports.MUI_TOKENS[hex]) && !tokens.includes(hex))
+        if (profile.tokens[hex] && !tokens.includes(hex))
             tokens.push(hex);
     }
-    CDS_CLASS_RE.lastIndex = 0;
-    while ((m = CDS_CLASS_RE.exec(bodyText)) !== null) {
-        if (!classNames.includes(m[0]))
-            classNames.push(m[0]);
-    }
-    MUI_CLASS_RE.lastIndex = 0;
-    while ((m = MUI_CLASS_RE.exec(bodyText)) !== null) {
-        if (!classNames.includes(m[0]))
-            classNames.push(m[0]);
+    for (const classRe of profile.classPatterns) {
+        classRe.lastIndex = 0; // shared /g regexes — reset between scans
+        while ((m = classRe.exec(bodyText)) !== null) {
+            if (!classNames.includes(m[0]))
+                classNames.push(m[0]);
+        }
     }
     return { tokens, classNames };
 }
@@ -5682,12 +5585,12 @@ function extractPropNames(params) {
 }
 const PROP_MATCH_THRESHOLD = 0.6;
 const PROP_MATCH_MIN_OVERLAP = 2;
-function findPropMatch(localProps) {
+function findPropMatch(localProps, propSignatures) {
     if (localProps.length === 0)
         return null;
     const localSet = new Set(localProps);
     let best = null;
-    for (const [dsName, dsProps] of Object.entries(exports.DS_PROP_SIGNATURES)) {
+    for (const [dsName, dsProps] of Object.entries(propSignatures)) {
         const matched = dsProps.filter(p => localSet.has(p));
         const score = matched.length / dsProps.length;
         if (score >= PROP_MATCH_THRESHOLD &&
@@ -5714,7 +5617,7 @@ function extractJsxElements(bodyText) {
 function splitPascal(name) {
     return name.match(/[A-Z][a-z0-9]*/g) ?? [];
 }
-function findSubComponentMatch(componentName, bodyText) {
+function findSubComponentMatch(componentName, bodyText, profile) {
     const jsxElements = extractJsxElements(bodyText);
     const jsxSet = new Set(jsxElements);
     // Collect sub-component usages. If the real parent element is also present
@@ -5722,7 +5625,7 @@ function findSubComponentMatch(componentName, bodyText) {
     // — skip it. Only flag when sub-components appear without their parent.
     const parentUsages = new Map();
     for (const el of jsxElements) {
-        const parent = exports.DS_SUBCOMPONENT_MAP[el];
+        const parent = profile.subComponentMap[el];
         if (!parent)
             continue;
         const parentElement = parent.startsWith('Mui') ? parent.slice(3) : parent;
@@ -5734,10 +5637,10 @@ function findSubComponentMatch(componentName, bodyText) {
     }
     if (parentUsages.size === 0)
         return null;
-    // Name-contains: check each PascalCase word segment against DS_NAME_SEGMENTS
+    // Name-contains: check each PascalCase word segment against the profile's segments
     const words = splitPascal(componentName);
     const nameHit = words
-        .map(w => ({ word: w, ds: exports.DS_NAME_SEGMENTS[w] }))
+        .map(w => ({ word: w, ds: profile.nameSegments[w] }))
         .find(({ ds }) => ds !== undefined);
     // Pick best match: prefer parent with both signals, then most sub-components
     let best = null;
@@ -5752,7 +5655,10 @@ function findSubComponentMatch(componentName, bodyText) {
     }
     return best;
 }
-function checkInlineDrift(fileContent, dsExports, filename) {
+function checkInlineDrift(fileContent, dsExports, filename, profile) {
+    // Without a profile we can't know which DS the repo uses, so fall back to every
+    // built-in. Callers that know the config should pass a profile (checkDriftFull does).
+    const p = profile ?? (0, profiles_1.allBuiltinProfiles)();
     const isTsx = filename?.endsWith('.tsx') ?? false;
     if (!isTsx && !isComponentFile(fileContent)) {
         return { localShadows: [], tokenFingerprints: [], propMatches: [], subComponentMatches: [] };
@@ -5802,24 +5708,24 @@ function checkInlineDrift(fileContent, dsExports, filename) {
         if (dsExports.size > 0 && dsExports.has(componentName)) {
             localShadows.push(componentName);
         }
-        // Signal 2: function body contains Carbon token values or cds-- class names
+        // Signal 2: function body contains DS token values or DS class names
         if (bodyRange) {
             const bodyText = fileContent.slice(bodyRange[0], bodyRange[1]);
-            const { tokens, classNames } = scanBodyForTokens(bodyText);
+            const { tokens, classNames } = scanBodyForTokens(bodyText, p);
             if (tokens.length > 0 || classNames.length > 0) {
                 tokenFingerprints.push({ componentName, tokens, classNames });
             }
         }
         // Signal 3: prop signature matches a DS component's known API
         const localProps = extractPropNames(funcParams);
-        const match = findPropMatch(localProps);
+        const match = findPropMatch(localProps, p.propSignatures);
         if (match) {
             propMatches.push({ ...match, componentName });
         }
         // Signal 4: sub-component usage (without real parent) + name-contains
         if (bodyRange) {
             const bodyText = fileContent.slice(bodyRange[0], bodyRange[1]);
-            const subMatch = findSubComponentMatch(componentName, bodyText);
+            const subMatch = findSubComponentMatch(componentName, bodyText, p);
             if (subMatch) {
                 subComponentMatches.push(subMatch);
             }
@@ -5827,9 +5733,11 @@ function checkInlineDrift(fileContent, dsExports, filename) {
     }
     return { localShadows, tokenFingerprints, propMatches, subComponentMatches };
 }
-function checkDriftFull(fileContent, dsExports, canonicalPkgs, allowlist, filename) {
+function checkDriftFull(fileContent, dsExports, canonicalPkgs, allowlist, filename, profile) {
     const { driftCount, driftedSymbols } = checkDrift(fileContent, dsExports, canonicalPkgs, allowlist, filename);
-    const inlineDrift = checkInlineDrift(fileContent, dsExports, filename);
+    // Inline detection is DS-specific: only the profiles for the configured packages
+    // apply (plus custom config data when the caller built the profile from config).
+    const inlineDrift = checkInlineDrift(fileContent, dsExports, filename, profile ?? (0, profiles_1.buildDetectionProfile)(canonicalPkgs));
     const inlineCount = inlineDrift.localShadows.length +
         inlineDrift.tokenFingerprints.length +
         inlineDrift.propMatches.length +
@@ -6068,6 +5976,267 @@ function diffChangedFiles(cwd, baseRef) {
 
 /***/ }),
 
+/***/ 717:
+/***/ ((__unused_webpack_module, exports) => {
+
+
+/**
+ * Detection profiles: the DS-specific data behind the inline drift rules
+ * (token-fingerprint, prop-match, sub-component). The engine itself is generic;
+ * a profile tells it what to look for.
+ *
+ * A profile is built per run from (1) the built-in data for whichever known design
+ * systems appear in `component_library`, and (2) custom data from `.polder.yml`
+ * (`tokens`, `class_prefixes`, `prop_signatures`, `sub_components`, `name_segments`).
+ * Built-ins are matched by package so a Carbon repo is never flagged with MUI palette
+ * names for coincidental hex values — and a custom DS gets real inline detection
+ * instead of silently getting none.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.MUI_PROFILE = exports.CARBON_PROFILE = void 0;
+exports.emptyProfile = emptyProfile;
+exports.mergeProfiles = mergeProfiles;
+exports.buildDetectionProfile = buildDetectionProfile;
+exports.allBuiltinProfiles = allBuiltinProfiles;
+function emptyProfile() {
+    return { tokens: {}, classPatterns: [], propSignatures: {}, subComponentMap: {}, nameSegments: {} };
+}
+// ── Carbon Design System (@carbon/*) ─────────────────────────────────────────
+// Carbon v11 (White theme) — high-specificity hex tokens. Values common to any UI
+// (#fff, #ccc, generic grays) are intentionally omitted to keep false positives low.
+const CARBON_TOKENS = {
+    '#0f62fe': 'interactive / blue-60',
+    '#0043ce': 'interactive-02 / blue-70',
+    '#002d9c': 'interactive-03 / blue-80',
+    '#161616': 'text-primary / gray-100',
+    '#da1e28': 'support-error / red-60',
+    '#198038': 'support-success / green-50',
+    '#24a148': 'support-success-hover / green-40',
+    '#f1c21b': 'support-warning / yellow-30',
+    '#ff832b': 'support-caution / orange-40',
+    '#ba4e00': 'support-caution-dark / orange-70',
+    '#4589ff': 'interactive-hover / blue-40',
+    '#007d79': 'teal-60',
+    '#08bdba': 'teal-40',
+    '#6929c4': 'purple-70',
+};
+// Key props per Carbon component. Only distinctive props — broad enough to catch
+// forks, tight enough to avoid false positives on unrelated shared prop names.
+const CARBON_PROP_SIGNATURES = {
+    Button: ['kind', 'size', 'disabled', 'renderIcon', 'iconDescription'],
+    IconButton: ['label', 'kind', 'size', 'onClick', 'disabled'],
+    Tag: ['type', 'filter', 'onClose', 'size'],
+    Tile: ['light', 'href', 'clicked'],
+    Modal: ['open', 'onRequestClose', 'modalHeading', 'primaryButtonText', 'secondaryButtonText'],
+    TextInput: ['id', 'labelText', 'value', 'onChange', 'placeholder', 'invalid', 'invalidText'],
+    NumberInput: ['value', 'onChange', 'min', 'max', 'step', 'label', 'invalidText'],
+    Select: ['id', 'labelText', 'value', 'onChange', 'disabled'],
+    Dropdown: ['id', 'label', 'items', 'onChange', 'selectedItem'],
+    Checkbox: ['id', 'labelText', 'checked', 'onChange', 'disabled', 'indeterminate'],
+    Toggle: ['id', 'labelText', 'toggled', 'onToggle', 'disabled'],
+    InlineNotification: ['kind', 'title', 'subtitle', 'onCloseButtonClick', 'actions', 'lowContrast'],
+    OverflowMenu: ['flipped', 'renderIcon', 'iconDescription', 'selectorPrimaryFocus'],
+    ProgressBar: ['value', 'max', 'label', 'status'],
+    DataTable: ['rows', 'headers', 'render'],
+};
+const CARBON_SUBCOMPONENT_MAP = {
+    // Modal family
+    ModalBody: 'Modal',
+    ModalHeader: 'Modal',
+    ModalFooter: 'Modal',
+    // DataTable family
+    TableToolbar: 'DataTable',
+    TableToolbarContent: 'DataTable',
+    TableToolbarSearch: 'DataTable',
+    TableBatchActions: 'DataTable',
+    TableSelectAll: 'DataTable',
+    TableSelectRow: 'DataTable',
+    TableExpandRow: 'DataTable',
+    TableExpandedRow: 'DataTable',
+    TableExpandHeader: 'DataTable',
+    TableContainer: 'DataTable',
+    // Header family
+    HeaderName: 'Header',
+    HeaderNavigation: 'Header',
+    HeaderMenuItem: 'Header',
+    HeaderGlobalBar: 'Header',
+    // SideNav family
+    SideNavItems: 'SideNav',
+    SideNavMenu: 'SideNav',
+    SideNavMenuItem: 'SideNav',
+    SideNavLink: 'SideNav',
+    // misc
+    BreadcrumbItem: 'Breadcrumb',
+    ProgressStep: 'ProgressIndicator',
+    ContentSwitcherSwitch: 'ContentSwitcher',
+    TabList: 'Tabs',
+    TabPanels: 'Tabs',
+    TabPanel: 'Tabs',
+    NotificationActionButton: 'ActionableNotification',
+};
+exports.CARBON_PROFILE = {
+    tokens: CARBON_TOKENS,
+    classPatterns: [/\bcds--[a-z][a-z0-9-]*/g],
+    propSignatures: CARBON_PROP_SIGNATURES,
+    subComponentMap: CARBON_SUBCOMPONENT_MAP,
+    // Conservative: only words distinctive enough to reduce false-positive risk.
+    // Generic words (Button, Input, Text, Icon, List…) are deliberately excluded.
+    nameSegments: {
+        Tag: 'Tag',
+        Tile: 'Tile',
+        Dropdown: 'Dropdown',
+    },
+};
+// ── Material UI (@mui/*) ─────────────────────────────────────────────────────
+// MUI v5 default theme palette — high-specificity values only.
+const MUI_TOKENS = {
+    '#1976d2': 'primary.main',
+    '#1565c0': 'primary.dark',
+    '#42a5f5': 'primary.light',
+    '#d32f2f': 'error.main',
+    '#c62828': 'error.dark',
+    '#ef5350': 'error.light',
+    '#2e7d32': 'success.main',
+    '#388e3c': 'success.light',
+    '#1b5e20': 'success.dark',
+    '#ed6c02': 'warning.main',
+    '#e65100': 'warning.dark',
+    '#ff9800': 'warning.light',
+    '#0288d1': 'info.main',
+    '#01579b': 'info.dark',
+    '#29b6f6': 'info.light',
+};
+const MUI_PROP_SIGNATURES = {
+    MuiSlider: ['value', 'onChange', 'min', 'max', 'step', 'marks', 'valueLabelDisplay', 'disabled'],
+    MuiRating: ['value', 'onChange', 'precision', 'max', 'size', 'readOnly', 'disabled'],
+    MuiChip: ['label', 'onDelete', 'color', 'size', 'variant', 'icon', 'disabled'],
+    MuiBadge: ['badgeContent', 'color', 'overlap', 'anchorOrigin', 'invisible', 'max'],
+    MuiSelect: ['value', 'onChange', 'label', 'multiple', 'renderValue', 'disabled'],
+};
+const MUI_SUBCOMPONENT_MAP = {
+    // Card family
+    CardMedia: 'MuiCard',
+    CardContent: 'MuiCard',
+    CardHeader: 'MuiCard',
+    CardActions: 'MuiCard',
+    // Dialog family
+    DialogTitle: 'MuiDialog',
+    DialogContent: 'MuiDialog',
+    DialogActions: 'MuiDialog',
+    DialogContentText: 'MuiDialog',
+    // Accordion family
+    AccordionSummary: 'MuiAccordion',
+    AccordionDetails: 'MuiAccordion',
+    // List family
+    ListItemText: 'MuiList',
+    ListItemIcon: 'MuiList',
+    ListItemSecondaryAction: 'MuiList',
+    ListSubheader: 'MuiList',
+    // Stepper family
+    StepLabel: 'MuiStepper',
+    StepContent: 'MuiStepper',
+    StepIcon: 'MuiStepper',
+    // Table family
+    TableHead: 'MuiTable',
+    TableBody: 'MuiTable',
+    TableRow: 'MuiTable',
+    TableCell: 'MuiTable',
+    TableFooter: 'MuiTable',
+    TablePagination: 'MuiTable',
+    // misc
+    ImageListItem: 'MuiImageList',
+    ImageListItemBar: 'MuiImageList',
+    PaginationItem: 'MuiPagination',
+    SpeedDialAction: 'MuiSpeedDial',
+    BottomNavigationAction: 'MuiBottomNavigation',
+    TreeItem: 'MuiTreeView',
+    TimelineItem: 'MuiTimeline',
+    TimelineDot: 'MuiTimeline',
+    TimelineContent: 'MuiTimeline',
+    TimelineConnector: 'MuiTimeline',
+    TimelineSeparator: 'MuiTimeline',
+};
+exports.MUI_PROFILE = {
+    tokens: MUI_TOKENS,
+    classPatterns: [/\bMui[A-Z][a-zA-Z]+-[a-z][a-zA-Z0-9-]*/g],
+    propSignatures: MUI_PROP_SIGNATURES,
+    subComponentMap: MUI_SUBCOMPONENT_MAP,
+    nameSegments: {
+        Card: 'MuiCard',
+        Slider: 'MuiSlider',
+        Rating: 'MuiRating',
+        Chip: 'MuiChip',
+        Badge: 'MuiBadge',
+        Dialog: 'MuiDialog',
+        Accordion: 'MuiAccordion',
+        Drawer: 'MuiDrawer',
+        Pagination: 'MuiPagination',
+        Snackbar: 'MuiSnackbar',
+        Skeleton: 'MuiSkeleton',
+        Stepper: 'MuiStepper',
+        Tooltip: 'MuiTooltip',
+        Breadcrumbs: 'MuiBreadcrumbs',
+    },
+};
+// ── Profile construction ─────────────────────────────────────────────────────
+/** Built-in profiles matched against the configured `component_library` packages. */
+const BUILTIN_PROFILES = [
+    { matches: (pkg) => pkg.startsWith('@carbon/'), profile: exports.CARBON_PROFILE },
+    { matches: (pkg) => pkg.startsWith('@mui/'), profile: exports.MUI_PROFILE },
+];
+function mergeProfiles(base, extra) {
+    return {
+        tokens: { ...base.tokens, ...extra.tokens },
+        classPatterns: [...base.classPatterns, ...extra.classPatterns],
+        propSignatures: { ...base.propSignatures, ...extra.propSignatures },
+        subComponentMap: { ...base.subComponentMap, ...extra.subComponentMap },
+        nameSegments: { ...base.nameSegments, ...extra.nameSegments },
+    };
+}
+const REGEX_SPECIALS = /[.*+?^${}()|[\]\\]/g;
+/** A class prefix from config becomes "prefix followed by any class-name tail". */
+function classPrefixToPattern(prefix) {
+    return new RegExp(`\\b${prefix.replace(REGEX_SPECIALS, '\\$&')}[a-zA-Z0-9_-]*`, 'g');
+}
+/**
+ * The profile for one run: built-in data for every configured package that matches a
+ * known design system, plus any custom detection data from `.polder.yml`. A package
+ * matching no built-in contributes nothing here — its drift is still caught by the
+ * export-based rules (import-drift, local-shadow), which need no profile.
+ */
+function buildDetectionProfile(canonicalPkgs, custom) {
+    let profile = emptyProfile();
+    for (const { matches, profile: builtin } of BUILTIN_PROFILES) {
+        if (canonicalPkgs.some(matches))
+            profile = mergeProfiles(profile, builtin);
+    }
+    if (custom) {
+        // Token keys are matched against lowercased hex values, so normalise here rather
+        // than trusting every caller to (config parsing does, direct callers may not).
+        const tokens = {};
+        for (const [hex, label] of Object.entries(custom.tokens ?? {}))
+            tokens[hex.toLowerCase()] = label;
+        profile = mergeProfiles(profile, {
+            tokens,
+            classPatterns: (custom.classPrefixes ?? []).map(classPrefixToPattern),
+            propSignatures: custom.propSignatures ?? {},
+            subComponentMap: custom.subComponents ?? {},
+            nameSegments: custom.nameSegments ?? {},
+        });
+    }
+    return profile;
+}
+/**
+ * Every built-in profile merged — the fallback when the caller has no package list to
+ * match against (e.g. `checkInlineDrift` invoked directly without a profile).
+ */
+function allBuiltinProfiles() {
+    return BUILTIN_PROFILES.reduce((acc, b) => mergeProfiles(acc, b.profile), emptyProfile());
+}
+
+
+/***/ }),
+
 /***/ 190:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -6187,6 +6356,7 @@ const fs = __importStar(__nccwpck_require__(896));
 const path = __importStar(__nccwpck_require__(928));
 const resolve_config_1 = __nccwpck_require__(190);
 const parser_1 = __nccwpck_require__(196);
+const profiles_1 = __nccwpck_require__(717);
 const analyze_1 = __nccwpck_require__(701);
 const suppress_1 = __nccwpck_require__(10);
 const render_1 = __nccwpck_require__(665);
@@ -6251,6 +6421,9 @@ async function runCi(platform, opts = {}) {
         dsExports,
         canonicalPkgs: config.componentLibrary,
         allowlist: config.allowlist,
+        // PolderConfig extends CustomDetection, so config carries any custom
+        // tokens/signatures straight into the profile.
+        profile: (0, profiles_1.buildDetectionProfile)(config.componentLibrary, config),
         suppress,
     });
     // Post a new comment only when there is reportable drift; otherwise update an
