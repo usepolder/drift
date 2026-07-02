@@ -44,6 +44,11 @@ export function runInitSubcommand(argv: string[], cwd: string = process.cwd()): 
     }
   }
 
+  if (!fs.existsSync(cwd) || !fs.statSync(cwd).isDirectory()) {
+    process.stderr.write(`polder-drift init: --cwd ${cwd} is not a directory\n`);
+    return 2;
+  }
+
   const target = path.join(cwd, '.polder.yml');
   let libs: string[];
 

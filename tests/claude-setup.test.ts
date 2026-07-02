@@ -259,4 +259,10 @@ describe('init --claude', () => {
     expect(code).toBe(2);
     expect(err).toContain('unknown option');
   });
+
+  it('--cwd pointing at a missing directory → exit 2, not a crash', () => {
+    const { code, err } = capture(() => runInitSubcommand(['--cwd', '/no/such/dir']));
+    expect(code).toBe(2);
+    expect(err).toContain('not a directory');
+  });
 });
