@@ -61,7 +61,7 @@ export interface CliReport {
   files: CliFileReport[];
 }
 
-const SOURCE_RE = /\.(ts|tsx|js|jsx)$/;
+export const SOURCE_RE = /\.(ts|tsx|js|jsx)$/;
 
 const TOP_HELP = `polder-drift — design system drift detection
 
@@ -71,14 +71,16 @@ Usage:
 Commands:
   scan [options] [files...]   Analyse files for design system drift (default work)
   ci                          Post the drift comment from a CI PR build (Azure DevOps)
-  init                        Write a starter .polder.yml (auto-detects your design system)
+  init [--claude]             Write a starter .polder.yml; --claude also wires Claude Code
   profile                     Generate .polder.profile.yml from your design system's source
+  claude-hook                 Claude Code PostToolUse hook (reads the payload on stdin)
   -h, --help                  Show this help
 
 Examples:
   polder-drift scan --all
   polder-drift scan --diff origin/main --json
   polder-drift scan src/Button.tsx
+  polder-drift init --claude
 
 Run "polder-drift scan --help" for scan options.
 `;
@@ -364,11 +366,11 @@ export function formatHuman(report: CliReport): string {
 
 // ── Subcommand dispatch ─────────────────────────────────────────────────────────
 
-// Reserved subcommand names. `ci`, `init`, and `profile` are built; `mcp` and
-// `telemetry` are reserved now so the surface is stable and are built in later phases.
-// To scan a file literally named like a subcommand, use `polder-drift scan <file>`
-// (scan takes paths explicitly).
-const RESERVED_SUBCOMMANDS = new Set(['scan', 'ci', 'mcp', 'telemetry', 'init', 'profile']);
+// Reserved subcommand names. `ci`, `init`, `profile`, and `claude-hook` are built;
+// `mcp` and `telemetry` are reserved now so the surface is stable and are built in
+// later phases. To scan a file literally named like a subcommand, use
+// `polder-drift scan <file>` (scan takes paths explicitly).
+const RESERVED_SUBCOMMANDS = new Set(['scan', 'ci', 'mcp', 'telemetry', 'init', 'profile', 'claude-hook']);
 
 export function runCli(argv: string[]): number {
   const first = argv[0];
@@ -386,6 +388,13 @@ export function runCli(argv: string[]): number {
     // `ci` is async (posts a PR comment). The module entrypoint routes it to
     // runCiSubcommand before reaching here; this guard only fires on direct calls.
     process.stderr.write("polder-drift: 'ci' runs as the process entrypoint, not via runCli().\n");
+    return 2;
+  }
+
+  if (first === 'claude-hook') {
+    // Like `ci`, routed at the module entrypoint (it reads the hook payload from
+    // stdin); this guard only fires on direct calls.
+    process.stderr.write("polder-drift: 'claude-hook' runs as the process entrypoint, not via runCli().\n");
     return 2;
   }
 
@@ -486,6 +495,15 @@ if (require.main === module) {
       .catch((err: Error) => {
         process.stderr.write(`polder-drift: ${err.message}\n`);
         process.exit(2);
+      });
+  } else if (argv[0] === 'claude-hook') {
+    // Lazy-import like `ci`. Exit 1 on loader failure (non-blocking for the agent,
+    // stderr shown to the user): a broken hook must never block the edit loop.
+    import('./commands/claude-hook')
+      .then(({ runClaudeHookSubcommand }) => process.exit(runClaudeHookSubcommand()))
+      .catch((err: Error) => {
+        process.stderr.write(`polder-drift: ${err.message}\n`);
+        process.exit(1);
       });
   } else {
     process.exit(runCli(argv));

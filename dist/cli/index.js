@@ -4130,7 +4130,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
-exports.UsageError = void 0;
+exports.UsageError = exports.SOURCE_RE = void 0;
 exports.parseArgs = parseArgs;
 exports.discoverFiles = discoverFiles;
 exports.buildReport = buildReport;
@@ -4147,7 +4147,7 @@ const suppress_1 = __nccwpck_require__(10);
 const profiles_1 = __nccwpck_require__(717);
 const init_1 = __nccwpck_require__(722);
 const profile_1 = __nccwpck_require__(463);
-const SOURCE_RE = /\.(ts|tsx|js|jsx)$/;
+exports.SOURCE_RE = /\.(ts|tsx|js|jsx)$/;
 const TOP_HELP = `polder-drift — design system drift detection
 
 Usage:
@@ -4156,14 +4156,16 @@ Usage:
 Commands:
   scan [options] [files...]   Analyse files for design system drift (default work)
   ci                          Post the drift comment from a CI PR build (Azure DevOps)
-  init                        Write a starter .polder.yml (auto-detects your design system)
+  init [--claude]             Write a starter .polder.yml; --claude also wires Claude Code
   profile                     Generate .polder.profile.yml from your design system's source
+  claude-hook                 Claude Code PostToolUse hook (reads the payload on stdin)
   -h, --help                  Show this help
 
 Examples:
   polder-drift scan --all
   polder-drift scan --diff origin/main --json
   polder-drift scan src/Button.tsx
+  polder-drift init --claude
 
 Run "polder-drift scan --help" for scan options.
 `;
@@ -4272,7 +4274,7 @@ function git(cwd, args) {
 }
 function discoverFiles(opts) {
     if (opts.mode === 'explicit') {
-        return opts.paths.filter((p) => SOURCE_RE.test(p));
+        return opts.paths.filter((p) => exports.SOURCE_RE.test(p));
     }
     let names;
     try {
@@ -4296,7 +4298,7 @@ function discoverFiles(opts) {
     const unique = new Set();
     for (const n of names) {
         const trimmed = n.trim();
-        if (trimmed && SOURCE_RE.test(trimmed))
+        if (trimmed && exports.SOURCE_RE.test(trimmed))
             unique.add(trimmed);
     }
     return [...unique].sort();
@@ -4407,11 +4409,11 @@ function formatHuman(report) {
     return lines.join('\n').trimEnd();
 }
 // ── Subcommand dispatch ─────────────────────────────────────────────────────────
-// Reserved subcommand names. `ci`, `init`, and `profile` are built; `mcp` and
-// `telemetry` are reserved now so the surface is stable and are built in later phases.
-// To scan a file literally named like a subcommand, use `polder-drift scan <file>`
-// (scan takes paths explicitly).
-const RESERVED_SUBCOMMANDS = new Set(['scan', 'ci', 'mcp', 'telemetry', 'init', 'profile']);
+// Reserved subcommand names. `ci`, `init`, `profile`, and `claude-hook` are built;
+// `mcp` and `telemetry` are reserved now so the surface is stable and are built in
+// later phases. To scan a file literally named like a subcommand, use
+// `polder-drift scan <file>` (scan takes paths explicitly).
+const RESERVED_SUBCOMMANDS = new Set(['scan', 'ci', 'mcp', 'telemetry', 'init', 'profile', 'claude-hook']);
 function runCli(argv) {
     const first = argv[0];
     if (first === undefined || first === '-h' || first === '--help') {
@@ -4427,6 +4429,12 @@ function runCli(argv) {
         process.stderr.write("polder-drift: 'ci' runs as the process entrypoint, not via runCli().\n");
         return 2;
     }
+    if (first === 'claude-hook') {
+        // Like `ci`, routed at the module entrypoint (it reads the hook payload from
+        // stdin); this guard only fires on direct calls.
+        process.stderr.write("polder-drift: 'claude-hook' runs as the process entrypoint, not via runCli().\n");
+        return 2;
+    }
     if (first === 'init') {
         return (0, init_1.runInitSubcommand)(argv.slice(1));
     }
@@ -4438,7 +4446,7 @@ function runCli(argv) {
         return 2;
     }
     // Anything else is an unknown command. Point file/flag-shaped input at `scan`.
-    if (first.startsWith('-') || SOURCE_RE.test(first)) {
+    if (first.startsWith('-') || exports.SOURCE_RE.test(first)) {
         process.stderr.write(`polder-drift: scanning now requires the 'scan' command. ` +
             `Try: polder-drift scan ${argv.join(' ')}\n`);
     }
@@ -4510,6 +4518,15 @@ if (require.main === require.cache[eval('__filename')]) {
             process.exit(2);
         });
     }
+    else if (argv[0] === 'claude-hook') {
+        // Lazy-import like `ci`. Exit 1 on loader failure (non-blocking for the agent,
+        // stderr shown to the user): a broken hook must never block the edit loop.
+        Promise.resolve().then(() => __importStar(__nccwpck_require__(568))).then(({ runClaudeHookSubcommand }) => process.exit(runClaudeHookSubcommand()))
+            .catch((err) => {
+            process.stderr.write(`polder-drift: ${err.message}\n`);
+            process.exit(1);
+        });
+    }
     else {
         process.exit(runCli(argv));
     }
@@ -4561,6 +4578,124 @@ async function runCiSubcommand(_argv) {
 
 /***/ }),
 
+/***/ 568:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.runClaudeHookSubcommand = runClaudeHookSubcommand;
+/**
+ * `polder-drift claude-hook` — the Claude Code PostToolUse hook entrypoint.
+ *
+ * Claude Code pipes a JSON payload on stdin after every matched tool call. We scan
+ * just the file the agent touched and, when it drifts, exit 2 with the findings on
+ * stderr — the one PostToolUse exit code whose stderr is fed back to Claude — so the
+ * agent fixes the drift in the same turn instead of shipping it to the PR.
+ *
+ * Anything that is not actionable drift must stay quiet (exit 0): a hook that
+ * complains on every edit gets deleted. The single exception is a broken
+ * `.polder.yml` (exit 1 — non-blocking, surfaced to the user, invisible to Claude).
+ *
+ * Installed by `polder-drift init --claude`; see docs/howto-claude-code.md.
+ */
+const fs = __importStar(__nccwpck_require__(896));
+const path = __importStar(__nccwpck_require__(928));
+const resolve_config_1 = __nccwpck_require__(190);
+const cli_1 = __nccwpck_require__(581);
+const findings_1 = __nccwpck_require__(363);
+function runClaudeHookSubcommand(payloadText) {
+    let raw;
+    if (payloadText !== undefined) {
+        raw = payloadText;
+    }
+    else {
+        try {
+            raw = fs.readFileSync(0, 'utf8'); // the PostToolUse payload arrives on stdin
+        }
+        catch {
+            return 0;
+        }
+    }
+    let payload;
+    try {
+        payload = JSON.parse(raw);
+    }
+    catch {
+        return 0;
+    }
+    const filePath = payload?.tool_input?.file_path;
+    if (typeof filePath !== 'string' || !cli_1.SOURCE_RE.test(filePath))
+        return 0;
+    const cwd = typeof payload.cwd === 'string' && payload.cwd !== '' ? payload.cwd : process.cwd();
+    let resolved;
+    try {
+        resolved = (0, resolve_config_1.resolveConfig)(cwd, path.join(cwd, '.polder.yml'));
+    }
+    catch (err) {
+        process.stderr.write(`polder-drift claude-hook: invalid .polder.yml — ${err.message}\n`);
+        return 1;
+    }
+    if (!resolved)
+        return 0; // no design system registered or detectable — nothing to check
+    const rel = path.isAbsolute(filePath) ? path.relative(cwd, filePath) : filePath;
+    if (rel.startsWith('..') || path.isAbsolute(rel))
+        return 0; // outside the project
+    if (!fs.existsSync(path.join(cwd, rel)))
+        return 0; // moved or deleted since the edit
+    const report = (0, cli_1.buildReport)(resolved.config, cwd, [rel], false);
+    if (report.summary.totalSignals === 0)
+        return 0;
+    const lines = [`polder-drift: design system drift in ${rel}:`];
+    for (const file of report.files) {
+        for (const finding of file.findings) {
+            const gutter = (finding.line !== undefined ? `:${finding.line}` : '').padEnd(6);
+            const label = findings_1.RULE_LABEL[finding.rule].toLowerCase().padEnd(18);
+            lines.push(`  ${gutter}${label}${finding.title} — ${finding.detail}`);
+        }
+    }
+    lines.push(`Use ${resolved.config.componentLibrary.join(', ')} instead of local copies, ` +
+        `look-alikes, or hardcoded tokens. If a finding is intentional, ask the user ` +
+        `to suppress its id in .polderignore.`);
+    process.stderr.write(lines.join('\n') + '\n');
+    return 2;
+}
+
+
+/***/ }),
+
 /***/ 722:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -4599,32 +4734,196 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.CLAUDE_MD_END = exports.CLAUDE_MD_BEGIN = exports.HOOK_MATCHER = exports.HOOK_COMMAND = void 0;
 exports.runInitSubcommand = runInitSubcommand;
 /**
  * `polder-drift init` — write a starter `.polder.yml`, seeded from detection when possible.
+ *
+ * With `--claude`, additionally wire the repo for Claude Code so drift feedback happens
+ * at write time, not just review time:
+ *   - a PostToolUse hook in `.claude/settings.json` that runs `polder-drift claude-hook`
+ *     on every file the agent writes or edits (see commands/claude-hook.ts), and
+ *   - a managed design-system section in `CLAUDE.md` naming the registered DS.
+ * Both writes are idempotent: re-running refreshes the CLAUDE.md section in place and
+ * never duplicates the hook.
  */
 const fs = __importStar(__nccwpck_require__(896));
 const path = __importStar(__nccwpck_require__(928));
 const detect_1 = __nccwpck_require__(52);
-function runInitSubcommand(_argv, cwd = process.cwd()) {
-    const target = path.join(cwd, '.polder.yml');
-    if (fs.existsSync(target)) {
-        process.stderr.write('polder-drift init: .polder.yml already exists; leaving it untouched.\n');
-        return 1;
+const config_1 = __nccwpck_require__(973);
+exports.HOOK_COMMAND = 'npx -y @usepolder/drift claude-hook';
+exports.HOOK_MATCHER = 'Write|Edit|MultiEdit';
+const HOOK_ENTRY = {
+    matcher: exports.HOOK_MATCHER,
+    hooks: [{ type: 'command', command: exports.HOOK_COMMAND }],
+};
+const MANUAL_SNIPPET = JSON.stringify({ hooks: { PostToolUse: [HOOK_ENTRY] } }, null, 2);
+exports.CLAUDE_MD_BEGIN = '<!-- polder-drift:begin -->';
+exports.CLAUDE_MD_END = '<!-- polder-drift:end -->';
+function runInitSubcommand(argv, cwd = process.cwd()) {
+    let claude = false;
+    for (let i = 0; i < argv.length; i++) {
+        const arg = argv[i];
+        if (arg === '--claude') {
+            claude = true;
+        }
+        else if (arg === '--cwd') {
+            cwd = argv[++i] ?? '';
+            if (!cwd) {
+                process.stderr.write('polder-drift init: --cwd requires a path\n');
+                return 2;
+            }
+        }
+        else {
+            process.stderr.write(`polder-drift init: unknown option: ${arg}\n`);
+            return 2;
+        }
     }
-    const det = (0, detect_1.detectComponentLibrary)(cwd);
-    const libs = det.libraries.length > 0 ? det.libraries : ['@your-org/design-system'];
-    const libYaml = libs.length === 1
-        ? `component_library: "${libs[0]}"`
-        : `component_library:\n${libs.map((l) => `  - "${l}"`).join('\n')}`;
-    const content = `${libYaml}\nallowlist: []\nfail_on_drift: false\n`;
-    fs.writeFileSync(target, content);
-    if (det.source === 'detected') {
-        process.stdout.write(`polder-drift init: wrote .polder.yml (detected ${libs.join(', ')}).\n`);
+    const target = path.join(cwd, '.polder.yml');
+    let libs;
+    if (fs.existsSync(target)) {
+        if (!claude) {
+            process.stderr.write('polder-drift init: .polder.yml already exists; leaving it untouched.\n');
+            return 1;
+        }
+        // --claude on a configured repo: keep the config, but the CLAUDE.md section
+        // still needs the DS names from it.
+        let config;
+        try {
+            config = (0, config_1.readConfig)(fs.readFileSync(target, 'utf8'));
+        }
+        catch (err) {
+            process.stderr.write(`polder-drift init: invalid .polder.yml — ${err.message}\n`);
+            return 2;
+        }
+        libs = config && config.componentLibrary.length > 0 ? config.componentLibrary : ['@your-org/design-system'];
+        process.stdout.write('polder-drift init: .polder.yml already exists; leaving it untouched.\n');
     }
     else {
-        process.stdout.write('polder-drift init: wrote .polder.yml — edit component_library to your design system package.\n');
+        const det = (0, detect_1.detectComponentLibrary)(cwd);
+        libs = det.libraries.length > 0 ? det.libraries : ['@your-org/design-system'];
+        const libYaml = libs.length === 1
+            ? `component_library: "${libs[0]}"`
+            : `component_library:\n${libs.map((l) => `  - "${l}"`).join('\n')}`;
+        const content = `${libYaml}\nallowlist: []\nfail_on_drift: false\n`;
+        fs.writeFileSync(target, content);
+        if (det.source === 'detected') {
+            process.stdout.write(`polder-drift init: wrote .polder.yml (detected ${libs.join(', ')}).\n`);
+        }
+        else {
+            process.stdout.write('polder-drift init: wrote .polder.yml — edit component_library to your design system package.\n');
+        }
     }
+    if (!claude)
+        return 0;
+    const hookCode = installClaudeHook(cwd);
+    if (hookCode !== 0)
+        return hookCode;
+    return writeClaudeMdSection(cwd, libs);
+}
+// ── .claude/settings.json ───────────────────────────────────────────────────────
+function bailSettings(reason) {
+    process.stderr.write(`polder-drift init: ${reason}; left untouched. Add the hook to .claude/settings.json manually:\n${MANUAL_SNIPPET}\n`);
+    return 1;
+}
+function hookAlreadyInstalled(entries) {
+    for (const entry of entries) {
+        const hooks = entry?.hooks;
+        if (!Array.isArray(hooks))
+            continue;
+        for (const h of hooks) {
+            const cmd = h?.command;
+            if (typeof cmd === 'string' && /(@usepolder\/drift|polder-drift) claude-hook/.test(cmd))
+                return true;
+        }
+    }
+    return false;
+}
+function installClaudeHook(cwd) {
+    const settingsPath = path.join(cwd, '.claude', 'settings.json');
+    let settings = {};
+    if (fs.existsSync(settingsPath)) {
+        let parsed;
+        try {
+            parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf8'));
+        }
+        catch {
+            return bailSettings('.claude/settings.json is not valid JSON');
+        }
+        if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+            return bailSettings('.claude/settings.json is not a JSON object');
+        }
+        settings = parsed;
+    }
+    const hooks = settings.hooks ?? {};
+    if (hooks === null || typeof hooks !== 'object' || Array.isArray(hooks)) {
+        return bailSettings('"hooks" in .claude/settings.json is not an object');
+    }
+    const post = hooks.PostToolUse ?? [];
+    if (!Array.isArray(post)) {
+        return bailSettings('"hooks.PostToolUse" in .claude/settings.json is not an array');
+    }
+    if (hookAlreadyInstalled(post)) {
+        process.stdout.write('polder-drift init: Claude Code hook already installed in .claude/settings.json.\n');
+        return 0;
+    }
+    post.push(HOOK_ENTRY);
+    hooks.PostToolUse = post;
+    settings.hooks = hooks;
+    fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+    fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n');
+    process.stdout.write('polder-drift init: installed the Claude Code hook in .claude/settings.json.\n');
+    return 0;
+}
+// ── CLAUDE.md ───────────────────────────────────────────────────────────────────
+function claudeMdSection(libs) {
+    const dsList = libs.map((l) => `\`${l}\``).join(', ');
+    return `${exports.CLAUDE_MD_BEGIN}
+## Design system
+
+This repo registers ${dsList} as its design system; polder-drift flags code that
+bypasses it. A PostToolUse hook scans every file you write or edit — when it reports
+drift, fix the drift before moving on.
+
+- Import UI components from ${dsList} instead of copying them into the repo or
+  importing them from local paths.
+- Don't re-implement components the design system already exports, and don't hardcode
+  its design-token values (theme colors, class prefixes) in component code.
+- Check a file yourself with \`npx @usepolder/drift scan --json <file>\`.
+- If a finding is intentional, it can be suppressed by id in \`.polderignore\` — ask the
+  user before suppressing anything.
+${exports.CLAUDE_MD_END}`;
+}
+function writeClaudeMdSection(cwd, libs) {
+    const file = path.join(cwd, 'CLAUDE.md');
+    const section = claudeMdSection(libs);
+    if (!fs.existsSync(file)) {
+        fs.writeFileSync(file, section + '\n');
+        process.stdout.write('polder-drift init: wrote the design-system section to CLAUDE.md.\n');
+        return 0;
+    }
+    const content = fs.readFileSync(file, 'utf8');
+    const begin = content.indexOf(exports.CLAUDE_MD_BEGIN);
+    const end = content.indexOf(exports.CLAUDE_MD_END);
+    if (begin !== -1 && end > begin) {
+        // Managed section present — refresh it in place, leaving the rest of the file alone.
+        const updated = content.slice(0, begin) + section + content.slice(end + exports.CLAUDE_MD_END.length);
+        if (updated === content) {
+            process.stdout.write('polder-drift init: CLAUDE.md design-system section already up to date.\n');
+        }
+        else {
+            fs.writeFileSync(file, updated);
+            process.stdout.write('polder-drift init: refreshed the design-system section in CLAUDE.md.\n');
+        }
+        return 0;
+    }
+    if (begin !== -1 || end !== -1) {
+        process.stderr.write('polder-drift init: CLAUDE.md has a broken polder-drift marker pair; fix or remove ' +
+            `the ${exports.CLAUDE_MD_BEGIN} / ${exports.CLAUDE_MD_END} lines and re-run.\n`);
+        return 1;
+    }
+    fs.writeFileSync(file, content.trimEnd() + '\n\n' + section + '\n');
+    process.stdout.write('polder-drift init: appended the design-system section to CLAUDE.md.\n');
     return 0;
 }
 

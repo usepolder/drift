@@ -206,6 +206,7 @@ See [Polder Drift on Azure DevOps](azure-pipelines.md).
 ## Where to go next
 
 - [CLI reference](reference-cli.md) — every command, flag, and exit code
+- [Claude Code integration](howto-claude-code.md) — drift feedback inside the agent loop, at write time
 - [Detection rules](reference-detection-rules.md) — exactly what each of the five signals means
 - [Configuration](reference-configuration.md) — `component_library`, `allowlist`, zero-config detection
 - [Suppress findings](howto-suppress-findings.md) — when a finding is acceptable
