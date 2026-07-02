@@ -18,8 +18,9 @@ Bare `polder-drift` (no command) prints top-level help and exits `0`.
 |---|---|
 | `scan` | Analyse files for design system drift (the default work). |
 | `ci` | Post the drift comment from a CI PR build (Azure DevOps). |
-| `init` | Write a starter `.polder.yml`, auto-detecting your design system. |
+| `init` | Write a starter `.polder.yml`; `--claude` also wires Claude Code. |
 | `profile` | Generate `.polder.profile.yml` from your design system's source. |
+| `claude-hook` | Claude Code PostToolUse hook entrypoint (reads the payload on stdin). |
 | `-h`, `--help` | Show help. |
 
 `mcp` and `telemetry` are **reserved** command names (built in later phases). Running
@@ -210,7 +211,7 @@ distinctive found — no file written); `2` config/usage error.
 ## `init`
 
 ```bash
-polder-drift init
+polder-drift init [--claude] [--cwd <dir>]
 ```
 
 Writes a starter `.polder.yml` in `--cwd` ([commands/init.ts](../src/commands/init.ts)):
@@ -219,7 +220,43 @@ Writes a starter `.polder.yml` in `--cwd` ([commands/init.ts](../src/commands/in
   message is printed. Exit `0`.
 - Otherwise the file is written with a `@your-org/design-system` placeholder to edit.
   Exit `0`.
-- If `.polder.yml` already exists, it is left untouched and `init` exits `1`.
+- If `.polder.yml` already exists, it is left untouched and `init` exits `1` — unless
+  `--claude` is set, in which case init keeps the config and continues.
+
+With `--claude`, init additionally wires the repo for Claude Code (all idempotent —
+re-running refreshes rather than duplicates):
+
+- Installs a `PostToolUse` hook in `.claude/settings.json` (matcher
+  `Write|Edit|MultiEdit`, command `npx -y @usepolder/drift claude-hook`), merging with
+  any existing settings. An unreadable or malformed settings file is left untouched
+  (exit `1`, with the snippet to add manually).
+- Writes a managed design-system section to `CLAUDE.md` between
+  `<!-- polder-drift:begin -->` / `<!-- polder-drift:end -->` markers, naming the
+  configured DS. Existing content outside the markers is preserved.
+
+Exit codes: `0` done; `1` refused (config exists without `--claude`, unusable
+settings file, or broken CLAUDE.md markers); `2` usage or invalid `.polder.yml`.
+Full walkthrough: [Wire Polder Drift into Claude Code](howto-claude-code.md).
+
+## `claude-hook`
+
+```bash
+polder-drift claude-hook   # reads the PostToolUse JSON payload on stdin
+```
+
+The Claude Code hook entrypoint ([commands/claude-hook.ts](../src/commands/claude-hook.ts)),
+installed by `init --claude` — not normally run by hand. It scans the single file named
+in the payload's `tool_input.file_path`, honouring the same `.polder.yml`,
+`.polder.profile.yml`, and `.polderignore` as every other surface.
+
+| Exit | Meaning |
+|---|---|
+| `2` | Drift found — findings on stderr are fed back to Claude, which self-corrects. |
+| `0` | Clean file, non-source file, unconfigured repo, file missing/outside the project, or malformed payload — silent by design. |
+| `1` | Invalid `.polder.yml` — error shown to the user, non-blocking for the agent. |
+
+See [Wire Polder Drift into Claude Code](howto-claude-code.md) for behaviour details
+and manual setup.
 
 ## Related
 

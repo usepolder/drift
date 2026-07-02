@@ -27,6 +27,7 @@ New here? Start with the tutorial, then dip into reference as needed.
 | [How detection works](docs/explanation-how-detection-works.md) | Explanation | Why it's pure/deterministic, the architecture, the anti-noise design |
 | [Suppress findings](docs/howto-suppress-findings.md) | How-to | Silencing a finding, a rule, or a path with `.polderignore` |
 | [Consume programmatically](docs/howto-consume-json.md) | How-to | Using the `--json` report from a script, agent, or pipeline |
+| [Claude Code integration](docs/howto-claude-code.md) | How-to | Drift feedback inside the agent loop, at write time |
 | [Azure DevOps](docs/azure-pipelines.md) | How-to | Running `polder-drift ci` on Azure DevOps pull requests |
 
 ## Configuration
@@ -144,6 +145,22 @@ polder-drift scan --json --all
 Each `findings[]` entry carries the finding's stable id (usable in `.polderignore`),
 severity, and 1-based source line, so an agent can consume this directly to locate and
 fix drift; `importDrift`/`inlineDrift` are the raw engine shapes the Action renders.
+
+## Claude Code
+
+AI agents are a major source of drift — asked for a button, they hand-roll one instead
+of importing yours. One command moves the check from review time to **write time**:
+
+```bash
+npx @usepolder/drift init --claude
+```
+
+This writes `.polder.yml` (if missing), installs a PostToolUse hook in
+`.claude/settings.json`, and adds a managed design-system section to `CLAUDE.md`. From
+then on, every file the agent writes or edits is scanned immediately; findings are fed
+back to the agent, which fixes the drift in the same turn — before it ever reaches a
+PR. Same engine, same config, same `.polderignore` as every other surface. Details:
+[Claude Code integration](docs/howto-claude-code.md).
 
 ## GitHub Action
 
