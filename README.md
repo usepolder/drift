@@ -128,6 +128,7 @@ jobs:
       pull-requests: write   # the Action upserts a PR comment; default GITHUB_TOKEN is read-only
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }   # full history — lets the Action report only the drift this PR introduces
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
       - run: npm ci
@@ -135,7 +136,10 @@ jobs:
 ```
 
 The Action reads `.polder.yml`, analyses the files touched by the PR, and upserts a
-single drift comment. Run your install step before it so DS exports resolve.
+single drift comment. Run your install step before it so DS exports resolve. The
+`fetch-depth: 0` on the checkout matters: without the base branch the Action can't tell
+new drift from pre-existing, so it falls back to reporting **all** drift — the full
+history is what enables the "introduced by this PR" view below.
 
 > **Permissions.** The Action posts the comment with the workflow's `GITHUB_TOKEN`,
 > which is **read-only by default** (and always read-only on PRs from forks). Without
