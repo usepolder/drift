@@ -34511,6 +34511,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.parseConfig = parseConfig;
+exports.parseProfileFile = parseProfileFile;
 exports.readConfig = readConfig;
 const yaml = __importStar(__nccwpck_require__(4281));
 const HEX_RE = /^#[0-9a-f]{6}$/;
@@ -34575,6 +34576,12 @@ function parseConfig(raw) {
     }
     // Custom detection data. Malformed entries throw (rather than being dropped) —
     // a silently-ignored typo here would look like the rule simply not working.
+    Object.assign(config, readCustomKeys(cfg));
+    return config;
+}
+/** Parse + validate the five custom-detection keys from a raw YAML object. */
+function readCustomKeys(cfg) {
+    const out = {};
     if (cfg.tokens !== undefined) {
         const tokens = {};
         for (const [k, v] of Object.entries(requireStringMap(cfg.tokens, 'tokens'))) {
@@ -34584,13 +34591,13 @@ function parseConfig(raw) {
             }
             tokens[hex] = v;
         }
-        config.tokens = tokens;
+        out.tokens = tokens;
     }
     if (cfg.class_prefixes !== undefined) {
         if (!Array.isArray(cfg.class_prefixes) || !cfg.class_prefixes.every((x) => typeof x === 'string' && x.length > 0)) {
             throw new Error('class_prefixes must be an array of non-empty strings');
         }
-        config.classPrefixes = cfg.class_prefixes;
+        out.classPrefixes = cfg.class_prefixes;
     }
     if (cfg.prop_signatures !== undefined) {
         if (typeof cfg.prop_signatures !== 'object' || cfg.prop_signatures === null || Array.isArray(cfg.prop_signatures)) {
@@ -34607,15 +34614,35 @@ function parseConfig(raw) {
             }
             signatures[name] = props;
         }
-        config.propSignatures = signatures;
+        out.propSignatures = signatures;
     }
     if (cfg.sub_components !== undefined) {
-        config.subComponents = requireStringMap(cfg.sub_components, 'sub_components');
+        out.subComponents = requireStringMap(cfg.sub_components, 'sub_components');
     }
     if (cfg.name_segments !== undefined) {
-        config.nameSegments = requireStringMap(cfg.name_segments, 'name_segments');
+        out.nameSegments = requireStringMap(cfg.name_segments, 'name_segments');
     }
-    return config;
+    return out;
+}
+/**
+ * Parse a generated `.polder.profile.yml` (written by `polder-drift profile`).
+ * Accepts only the five custom-detection keys, validated exactly like `.polder.yml`;
+ * unknown keys are ignored so the file can carry generator metadata.
+ */
+function parseProfileFile(raw) {
+    let parsed;
+    try {
+        parsed = yaml.load(raw);
+    }
+    catch (err) {
+        throw new Error(`Invalid YAML in .polder.profile.yml: ${err.message}`);
+    }
+    if (parsed === null || parsed === undefined)
+        return {};
+    if (typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Invalid .polder.profile.yml: must be a YAML object');
+    }
+    return readCustomKeys(parsed);
 }
 function readConfig(content) {
     if (content === null)
@@ -35722,11 +35749,35 @@ exports.GitHubPlatform = GitHubPlatform;
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.MUI_PROFILE = exports.CARBON_PROFILE = void 0;
 exports.emptyProfile = emptyProfile;
+exports.mergeCustomDetection = mergeCustomDetection;
 exports.mergeProfiles = mergeProfiles;
 exports.buildDetectionProfile = buildDetectionProfile;
 exports.allBuiltinProfiles = allBuiltinProfiles;
 function emptyProfile() {
     return { tokens: {}, classPatterns: [], propSignatures: {}, subComponentMap: {}, nameSegments: {} };
+}
+/**
+ * Merge two CustomDetection layers: `extra` wins per entry (records) and unions
+ * (prefix lists). Used to underlay a generated `.polder.profile.yml` beneath the
+ * hand-written `.polder.yml` keys, so manual config always has the last word.
+ */
+function mergeCustomDetection(base, extra) {
+    const out = {};
+    if (base.tokens || extra.tokens)
+        out.tokens = { ...base.tokens, ...extra.tokens };
+    if (base.classPrefixes || extra.classPrefixes) {
+        out.classPrefixes = [...new Set([...(base.classPrefixes ?? []), ...(extra.classPrefixes ?? [])])];
+    }
+    if (base.propSignatures || extra.propSignatures) {
+        out.propSignatures = { ...base.propSignatures, ...extra.propSignatures };
+    }
+    if (base.subComponents || extra.subComponents) {
+        out.subComponents = { ...base.subComponents, ...extra.subComponents };
+    }
+    if (base.nameSegments || extra.nameSegments) {
+        out.nameSegments = { ...base.nameSegments, ...extra.nameSegments };
+    }
+    return out;
 }
 // ── Carbon Design System (@carbon/*) ─────────────────────────────────────────
 // Carbon v11 (White theme) — high-specificity hex tokens. Values common to any UI
@@ -36003,16 +36054,24 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.PROFILE_FILENAME = void 0;
 exports.resolveConfig = resolveConfig;
 /**
  * Resolve a PolderConfig for a run. Precedence:
  *   1. An explicit `.polder.yml` (always wins; throws on invalid YAML).
  *   2. Otherwise, zero-config detection of the DS package from package.json.
  *   3. Otherwise null (caller shows guidance).
+ *
+ * Either way, a generated `.polder.profile.yml` (from `polder-drift profile`) is
+ * loaded as an UNDERLAY for the custom-detection keys: it fills in what the config
+ * doesn't set, and `.polder.yml` entries win on conflict.
  */
 const fs = __importStar(__nccwpck_require__(9896));
+const path = __importStar(__nccwpck_require__(6928));
 const config_1 = __nccwpck_require__(2973);
+const profiles_1 = __nccwpck_require__(9717);
 const detect_1 = __nccwpck_require__(1052);
+exports.PROFILE_FILENAME = '.polder.profile.yml';
 function resolveConfig(cwd, configPath) {
     let content = null;
     try {
@@ -36021,15 +36080,42 @@ function resolveConfig(cwd, configPath) {
     catch {
         /* no file — fall through to detection */
     }
+    let resolved = null;
     if (content !== null) {
         const config = (0, config_1.readConfig)(content); // throws on invalid YAML; null only for empty
-        return config ? { config, source: 'file' } : null;
+        resolved = config ? { config, source: 'file' } : null;
     }
-    const det = (0, detect_1.detectComponentLibrary)(cwd);
-    if (det.libraries.length > 0) {
-        return { config: { componentLibrary: det.libraries, allowlist: [], failOnDrift: false }, source: 'detected' };
+    else {
+        const det = (0, detect_1.detectComponentLibrary)(cwd);
+        if (det.libraries.length > 0) {
+            resolved = { config: { componentLibrary: det.libraries, allowlist: [], failOnDrift: false }, source: 'detected' };
+        }
     }
-    return null;
+    if (!resolved)
+        return null;
+    const generated = loadGeneratedProfile(cwd); // throws on invalid YAML — a corrupt file must not be silently skipped
+    if (generated) {
+        const c = resolved.config;
+        const explicit = {
+            tokens: c.tokens,
+            classPrefixes: c.classPrefixes,
+            propSignatures: c.propSignatures,
+            subComponents: c.subComponents,
+            nameSegments: c.nameSegments,
+        };
+        Object.assign(c, (0, profiles_1.mergeCustomDetection)(generated, explicit));
+    }
+    return resolved;
+}
+function loadGeneratedProfile(cwd) {
+    let raw;
+    try {
+        raw = fs.readFileSync(path.join(cwd, exports.PROFILE_FILENAME), 'utf8');
+    }
+    catch {
+        return null; // no generated profile — the common case
+    }
+    return (0, config_1.parseProfileFile)(raw);
 }
 
 

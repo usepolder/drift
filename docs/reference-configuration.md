@@ -136,11 +136,15 @@ profile** ([profiles.ts](../src/profiles.ts)), built per run from two sources:
    `component_library`: `@carbon/*` activates the Carbon profile, `@mui/*` the MUI
    profile. Built-ins never apply outside their DS — a Carbon-only repo is not flagged
    with MUI palette names for coincidental hex values.
-2. **Custom keys** from `.polder.yml` (below), merged on top. This is how an in-house
-   design system gets inline detection.
+2. **A generated `.polder.profile.yml`**, written by
+   [`polder-drift profile`](reference-cli.md#profile) from your design system's own
+   source, loaded automatically when present.
+3. **Custom keys** from `.polder.yml` (below), merged on top — the hand-written
+   config always wins on conflict.
 
-With neither (an unknown `component_library` and no custom keys), only the
-export-based rules run: import-drift and local-shadow, which need no profile.
+With none of these (an unknown `component_library`, no generated profile, no custom
+keys), only the export-based rules run: import-drift and local-shadow, which need no
+profile.
 
 ### `tokens` (optional)
 
