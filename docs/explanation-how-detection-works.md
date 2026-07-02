@@ -125,8 +125,8 @@ Every one of those choices gives something up. Named honestly:
 - **Export resolution is regex-based.** `.d.ts` parsing uses regular expressions over
   `export` statements and `export *` re-export chains rather than a full TypeScript
   type checker — fast and dependency-light, but it can miss exotic re-export shapes.
-- **Per-PR file caps.** The GitHub transport lists up to 100 changed files per PR.
-  Enormous PRs may not be fully covered.
+- **Per-PR file caps.** The GitHub transport pages through the PR's changed files up
+  to the API's own ceiling (3000 files); beyond that, coverage is partial.
 
 ## Alternatives considered
 

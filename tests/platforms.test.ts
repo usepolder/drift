@@ -232,6 +232,64 @@ describe('GitHubPlatform.findExistingComment pagination', () => {
   });
 });
 
+// GitHubPlatform.getChangedSourceFiles walks every page of pulls.listFiles so PRs with
+// >100 changed files are fully analysed instead of silently truncated to the first page.
+describe('GitHubPlatform.getChangedSourceFiles pagination', () => {
+  const ORIG_REPO = process.env.GITHUB_REPOSITORY;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    github.context.payload = {};
+    if (ORIG_REPO === undefined) delete process.env.GITHUB_REPOSITORY;
+    else process.env.GITHUB_REPOSITORY = ORIG_REPO;
+  });
+
+  interface PrFile {
+    filename: string;
+    status: string;
+  }
+
+  function platformWith(pages: PrFile[][]) {
+    const listFiles = vi.fn(async ({ page }: { page: number }) => ({ data: pages[page - 1] ?? [] }));
+    const octokit = { rest: { pulls: { listFiles } } };
+
+    vi.spyOn(github, 'getOctokit').mockReturnValue(octokit as unknown as ReturnType<typeof github.getOctokit>);
+    vi.spyOn(core, 'getInput').mockReturnValue('test-token');
+    process.env.GITHUB_REPOSITORY = 'acme/web';
+    github.context.payload = { pull_request: { number: 42, base: { sha: 'base-sha' } } };
+
+    return { platform: GitHubPlatform.fromEnv()!, listFiles };
+  }
+
+  const fullPage = (start: number): PrFile[] =>
+    Array.from({ length: 100 }, (_, i) => ({ filename: `src/File${start + i}.tsx`, status: 'modified' }));
+
+  it('collects files across pages instead of stopping at the first 100', async () => {
+    const { platform, listFiles } = platformWith([
+      fullPage(1), // page 1 is full → must page on
+      [
+        { filename: 'src/File101.tsx', status: 'modified' },
+        { filename: 'src/Removed.tsx', status: 'removed' }, // filtered out
+        { filename: 'README.md', status: 'modified' }, // not a source file
+      ],
+    ]);
+
+    const files = await platform.getChangedSourceFiles();
+    expect(listFiles).toHaveBeenCalledTimes(2);
+    expect(listFiles.mock.calls[1][0]).toMatchObject({ page: 2, per_page: 100 });
+    expect(files).toHaveLength(101);
+    expect(files).toContain('src/File101.tsx');
+    expect(files).not.toContain('src/Removed.tsx');
+    expect(files).not.toContain('README.md');
+  });
+
+  it('stops on the first short page without over-fetching', async () => {
+    const { platform, listFiles } = platformWith([[{ filename: 'src/A.tsx', status: 'added' }]]);
+    await expect(platform.getChangedSourceFiles()).resolves.toEqual(['src/A.tsx']);
+    expect(listFiles).toHaveBeenCalledTimes(1);
+  });
+});
+
 // run-ci must report the *true* posted state and surface a failed write loudly, rather
 // than claiming a comment was posted when the transport never wrote one (findings #3/#16).
 describe('runCi post-state tracking', () => {

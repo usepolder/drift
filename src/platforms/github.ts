@@ -8,7 +8,10 @@ import * as github from '@actions/github';
 import type { PrPlatform } from './types';
 
 const SOURCE_RE = /\.(ts|tsx|js|jsx)$/;
-const MAX_FILES = 100;
+const FILES_PER_PAGE = 100;
+// The GitHub API lists at most 3000 files per PR (30 pages of 100); walking further
+// returns empty pages, so this cap is the API's own ceiling, not a truncation choice.
+const MAX_FILE_PAGES = 30;
 const COMMENTS_PER_PAGE = 100;
 // Upper bound on comment pages we walk, so a misbehaving API can't loop us forever.
 // Even very busy PRs hold far fewer than 50 * 100 = 5000 issue comments.
@@ -49,14 +52,27 @@ export class GitHubPlatform implements PrPlatform {
     return this.baseSha || null;
   }
 
+  /**
+   * All source files changed by the PR, walking every page of `pulls.listFiles`. A
+   * single 100-file page silently drops files on large PRs (refactors, renames) —
+   * exactly the PRs where partial analysis is most misleading.
+   */
   async getChangedSourceFiles(): Promise<string[]> {
-    const { data } = await this.octokit.rest.pulls.listFiles({
-      owner: this.owner,
-      repo: this.repo,
-      pull_number: this.prNumber,
-      per_page: MAX_FILES,
-    });
-    return data.filter((f) => SOURCE_RE.test(f.filename) && f.status !== 'removed').map((f) => f.filename);
+    const files: string[] = [];
+    for (let page = 1; page <= MAX_FILE_PAGES; page++) {
+      const { data } = await this.octokit.rest.pulls.listFiles({
+        owner: this.owner,
+        repo: this.repo,
+        pull_number: this.prNumber,
+        per_page: FILES_PER_PAGE,
+        page,
+      });
+      for (const f of data) {
+        if (SOURCE_RE.test(f.filename) && f.status !== 'removed') files.push(f.filename);
+      }
+      if (data.length < FILES_PER_PAGE) break;
+    }
+    return files;
   }
 
   async upsertComment(body: string, marker: string, createIfMissing: boolean): Promise<boolean> {
