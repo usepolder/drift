@@ -1,6 +1,6 @@
 {
   "name": "@usepolder/drift",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Design system drift detection for TypeScript/JavaScript. Flags components that bypass your registered design system, as a GitHub Action or a local CLI.",
   "license": "Apache-2.0",
   "author": "Polder HQ",
