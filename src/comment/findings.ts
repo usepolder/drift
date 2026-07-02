@@ -27,6 +27,8 @@ export interface Finding {
   title: string;
   detail: string;
   severity: Severity;
+  /** 1-based source line (import specifier / component definition), when known. */
+  line?: number;
   commit?: string; // git attribution (filled by the adoption/attribution pass)
 }
 
@@ -54,18 +56,29 @@ export function findingId(file: string, rule: DriftRule, key: string): string {
 /** Flatten one file's engine result into stable, normalised findings. */
 export function flattenFindings(file: string, result: FullDriftResult): Finding[] {
   const out: Finding[] = [];
-  const push = (rule: DriftRule, key: string, title: string, detail: string): void => {
-    out.push({ id: findingId(file, rule, key), file, rule, key, title, detail, severity: SEVERITY[rule] });
+  // The line does NOT participate in the id — a finding that merely moves within its
+  // file keeps its id, so `.polderignore` entries survive unrelated edits.
+  const push = (rule: DriftRule, key: string, title: string, detail: string, line?: number): void => {
+    out.push({ id: findingId(file, rule, key), file, rule, key, title, detail, severity: SEVERITY[rule], line });
   };
+  const componentLine = (name: string): number | undefined => result.inlineDrift.componentLines[name];
 
   for (const sym of result.importDrift.symbols) {
-    push('import-drift', sym, sym, 'DS component imported from a local path instead of the package');
+    push(
+      'import-drift', sym, sym,
+      'DS component imported from a local path instead of the package',
+      result.importDrift.lines[sym],
+    );
   }
   for (const name of result.inlineDrift.localShadows) {
-    push('local-shadow', name, name, 'Component defined in-file with the same name as a DS export');
+    push('local-shadow', name, name, 'Component defined in-file with the same name as a DS export', componentLine(name));
   }
   for (const fp of result.inlineDrift.tokenFingerprints) {
-    push('token-fingerprint', fp.componentName, fp.componentName, [...fp.tokens, ...fp.classNames].join(', '));
+    push(
+      'token-fingerprint', fp.componentName, fp.componentName,
+      [...fp.tokens, ...fp.classNames].join(', '),
+      componentLine(fp.componentName),
+    );
   }
   for (const pm of result.inlineDrift.propMatches) {
     push(
@@ -73,6 +86,7 @@ export function flattenFindings(file: string, result: FullDriftResult): Finding[
       pm.componentName,
       `${pm.componentName} ~ ${pm.matchedDs}`,
       `${Math.round(pm.score * 100)}% prop overlap: ${pm.matchedProps.join(', ')}`,
+      componentLine(pm.componentName),
     );
   }
   for (const sm of result.inlineDrift.subComponentMatches) {
@@ -81,6 +95,7 @@ export function flattenFindings(file: string, result: FullDriftResult): Finding[
       sm.componentName,
       `${sm.componentName} ~ ${sm.matchedDs}`,
       `${sm.confidence}: uses ${sm.subComponentsUsed.join(', ')}`,
+      componentLine(sm.componentName),
     );
   }
   return out;

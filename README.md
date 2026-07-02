@@ -100,25 +100,34 @@ polder-drift scan --json --all
 {
   "version": 1,
   "config": { "componentLibrary": ["@acme/ds"], "allowlist": [], "failOnDrift": true },
-  "summary": { "filesAnalyzed": 3, "filesWithDrift": 1, "totalSignals": 2 },
+  "summary": { "filesAnalyzed": 3, "filesWithDrift": 1, "totalSignals": 2, "suppressedSignals": 0 },
   "files": [
     {
       "filename": "src/Modal.tsx",
       "totalCount": 2,
-      "importDrift": { "count": 1, "symbols": ["Button from './ui/Button'"] },
+      "findings": [
+        { "id": "a1b2c3d4e5f6", "rule": "import-drift", "severity": "high", "line": 2,
+          "title": "Button from './ui/Button'",
+          "detail": "DS component imported from a local path instead of the package" },
+        { "id": "f6e5d4c3b2a1", "rule": "prop-match", "severity": "medium", "line": 9,
+          "title": "Modal ~ ComposedModal", "detail": "66% prop overlap: open, onClose" }
+      ],
+      "importDrift": { "count": 1, "symbols": ["Button from './ui/Button'"], "lines": { "Button from './ui/Button'": 2 } },
       "inlineDrift": {
         "localShadows": [],
         "tokenFingerprints": [],
         "propMatches": [{ "componentName": "Modal", "matchedDs": "ComposedModal", "matchedProps": ["open", "onClose"], "score": 0.66 }],
-        "subComponentMatches": []
+        "subComponentMatches": [],
+        "componentLines": { "Modal": 9 }
       }
     }
   ]
 }
 ```
 
-The `files[]` entries are the same `FullDriftResult` shape the Action renders, so an
-agent can consume this directly to locate and fix drift.
+Each `findings[]` entry carries the finding's stable id (usable in `.polderignore`),
+severity, and 1-based source line, so an agent can consume this directly to locate and
+fix drift; `importDrift`/`inlineDrift` are the raw engine shapes the Action renders.
 
 ## GitHub Action
 

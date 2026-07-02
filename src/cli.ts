@@ -35,6 +35,8 @@ export interface CliFinding {
   severity: Finding['severity'];
   title: string;
   detail: string;
+  /** 1-based source line (import specifier / component definition), when known. */
+  line?: number;
 }
 
 export interface CliFileReport {
@@ -280,8 +282,15 @@ export function buildReport(
     fileReports.push({
       filename,
       totalCount: kept.length,
-      findings: kept.map(({ id, rule, severity, title, detail }) => ({ id, rule, severity, title, detail })),
-      importDrift: { symbols: importSymbols, count: importSymbols.length },
+      findings: kept.map(({ id, rule, severity, title, detail, line }) => ({ id, rule, severity, title, detail, line })),
+      importDrift: {
+        symbols: importSymbols,
+        count: importSymbols.length,
+        lines: Object.fromEntries(
+          importSymbols.filter((s) => result.importDrift.lines[s] !== undefined)
+            .map((s) => [s, result.importDrift.lines[s]]),
+        ),
+      },
       inlineDrift: {
         localShadows: result.inlineDrift.localShadows.filter((n) => keep.has(`local-shadow|${n}`)),
         tokenFingerprints: result.inlineDrift.tokenFingerprints.filter((fp) =>
@@ -291,6 +300,7 @@ export function buildReport(
         subComponentMatches: result.inlineDrift.subComponentMatches.filter((sm) =>
           keep.has(`subcomponent|${sm.componentName}`),
         ),
+        componentLines: result.inlineDrift.componentLines,
       },
     });
   }
@@ -335,10 +345,12 @@ export function formatHuman(report: CliReport): string {
     if (f.totalCount === 0) continue;
     lines.push(`${f.filename}`);
 
-    // The trailing [id] is the `.polderignore` handle for the finding.
+    // Leading gutter is the source line; the trailing [id] is the `.polderignore`
+    // handle for the finding.
     for (const finding of f.findings) {
+      const gutter = (finding.line !== undefined ? `:${finding.line}` : '').padEnd(6);
       const label = RULE_LABEL[finding.rule].toLowerCase().padEnd(18);
-      lines.push(`  ${label}${finding.title} (${finding.detail}) [${finding.id}]`);
+      lines.push(`  ${gutter}${label}${finding.title} (${finding.detail}) [${finding.id}]`);
     }
     lines.push('');
   }

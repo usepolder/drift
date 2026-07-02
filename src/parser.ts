@@ -127,16 +127,23 @@ export interface DriftResult {
   driftedSymbols: string[];
 }
 
+export interface ImportDriftCheck {
+  driftCount: number;
+  driftedSymbols: string[];
+  /** 1-based source line per drifted symbol, keyed by the entry in `driftedSymbols`. */
+  lines: Record<string, number>;
+}
+
 export function checkDrift(
   fileContent: string,
   dsExports: Set<string>,
   canonicalPkgs: string[],
   allowlist: string[],
   filename?: string,
-): { driftCount: number; driftedSymbols: string[] } {
+): ImportDriftCheck {
   const isTsx = filename?.endsWith('.tsx') ?? false;
   if (!isTsx && !isComponentFile(fileContent)) {
-    return { driftCount: 0, driftedSymbols: [] };
+    return { driftCount: 0, driftedSymbols: [], lines: {} };
   }
 
   let ast;
@@ -144,10 +151,11 @@ export function checkDrift(
     ast = parse(fileContent, BABEL_OPTIONS);
   } catch {
     // @babel/parser couldn't parse this file even with errorRecovery
-    return { driftCount: 0, driftedSymbols: [] };
+    return { driftCount: 0, driftedSymbols: [], lines: {} };
   }
 
   const driftedSymbols: string[] = [];
+  const lines: Record<string, number> = {};
 
   for (const node of ast.program.body) {
     if (node.type !== 'ImportDeclaration') continue;
@@ -182,20 +190,25 @@ export function checkDrift(
                 : specifier.imported.value)
             : specifier.local.name;
 
+        // Prefer the specifier's own line (multi-line import blocks), falling back
+        // to the declaration's.
+        const line = specifier.loc?.start.line ?? decl.loc?.start.line;
         if (dsExports.size > 0 && dsExports.has(localName)) {
           driftedSymbols.push(`${localName} from '${source}'`);
+          if (line !== undefined) lines[`${localName} from '${source}'`] = line;
         } else if (dsExports.size === 0) {
           // Fallback: no DS exports resolved — use path-only heuristic
           // Only flag PascalCase symbols (likely components)
           if (/^[A-Z]/.test(localName)) {
             driftedSymbols.push(`${localName} from '${source}'`);
+            if (line !== undefined) lines[`${localName} from '${source}'`] = line;
           }
         }
       }
     }
   }
 
-  return { driftCount: driftedSymbols.length, driftedSymbols };
+  return { driftCount: driftedSymbols.length, driftedSymbols, lines };
 }
 
 /**
@@ -300,6 +313,11 @@ export interface InlineDriftResult {
   tokenFingerprints: TokenFingerprint[];
   propMatches: PropMatch[];
   subComponentMatches: SubComponentMatch[];
+  /**
+   * 1-based definition line per top-level component seen in the file. Every inline
+   * signal keys on the local component name, so one map locates all four.
+   */
+  componentLines: Record<string, number>;
 }
 
 function nodeRange(n: { start?: number | null; end?: number | null }): [number, number] | null {
@@ -440,22 +458,26 @@ export function checkInlineDrift(
   // Without a profile we can't know which DS the repo uses, so fall back to every
   // built-in. Callers that know the config should pass a profile (checkDriftFull does).
   const p = profile ?? allBuiltinProfiles();
+  const empty = (): InlineDriftResult => ({
+    localShadows: [], tokenFingerprints: [], propMatches: [], subComponentMatches: [], componentLines: {},
+  });
   const isTsx = filename?.endsWith('.tsx') ?? false;
   if (!isTsx && !isComponentFile(fileContent)) {
-    return { localShadows: [], tokenFingerprints: [], propMatches: [], subComponentMatches: [] };
+    return empty();
   }
 
   let ast;
   try {
     ast = parse(fileContent, BABEL_OPTIONS);
   } catch {
-    return { localShadows: [], tokenFingerprints: [], propMatches: [], subComponentMatches: [] };
+    return empty();
   }
 
   const localShadows: string[] = [];
   const tokenFingerprints: TokenFingerprint[] = [];
   const propMatches: PropMatch[] = [];
   const subComponentMatches: SubComponentMatch[] = [];
+  const componentLines: Record<string, number> = {};
 
   for (const topNode of ast.program.body) {
     // Unwrap `export function Foo` / `export const Foo = ...`
@@ -467,11 +489,13 @@ export function checkInlineDrift(
     let componentName: string | null = null;
     let bodyRange: [number, number] | null = null;
     let funcParams: readonly unknown[] = [];
+    let definitionLine: number | undefined;
 
     if (node.type === 'FunctionDeclaration' && node.id && /^[A-Z]/.test(node.id.name)) {
       componentName = node.id.name;
       bodyRange = nodeRange(node.body);
       funcParams = node.params;
+      definitionLine = node.loc?.start.line;
     } else if (node.type === 'VariableDeclaration') {
       for (const decl of node.declarations) {
         if (decl.id.type !== 'Identifier') continue;
@@ -482,11 +506,13 @@ export function checkInlineDrift(
           componentName = name;
           bodyRange = nodeRange(init.body);
           funcParams = init.params;
+          definitionLine = decl.loc?.start.line;
         }
       }
     }
 
     if (!componentName) continue;
+    if (definitionLine !== undefined) componentLines[componentName] = definitionLine;
 
     // Signal 1: name shadows a DS export
     if (dsExports.size > 0 && dsExports.has(componentName)) {
@@ -519,13 +545,18 @@ export function checkInlineDrift(
     }
   }
 
-  return { localShadows, tokenFingerprints, propMatches, subComponentMatches };
+  return { localShadows, tokenFingerprints, propMatches, subComponentMatches, componentLines };
 }
 
 // ── Combined result ───────────────────────────────────────────────────────────
 
 export interface FullDriftResult {
-  importDrift: { count: number; symbols: string[] };
+  importDrift: {
+    count: number;
+    symbols: string[];
+    /** 1-based source line per entry in `symbols`. */
+    lines: Record<string, number>;
+  };
   inlineDrift: InlineDriftResult;
   totalCount: number;
 }
@@ -538,7 +569,7 @@ export function checkDriftFull(
   filename?: string,
   profile?: DetectionProfile,
 ): FullDriftResult {
-  const { driftCount, driftedSymbols } = checkDrift(
+  const { driftCount, driftedSymbols, lines } = checkDrift(
     fileContent, dsExports, canonicalPkgs, allowlist, filename,
   );
   // Inline detection is DS-specific: only the profiles for the configured packages
@@ -552,7 +583,7 @@ export function checkDriftFull(
     inlineDrift.propMatches.length +
     inlineDrift.subComponentMatches.length;
   return {
-    importDrift: { count: driftCount, symbols: driftedSymbols },
+    importDrift: { count: driftCount, symbols: driftedSymbols, lines },
     inlineDrift,
     totalCount: driftCount + inlineCount,
   };

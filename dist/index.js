@@ -34195,23 +34195,26 @@ function findingId(file, rule, key) {
 /** Flatten one file's engine result into stable, normalised findings. */
 function flattenFindings(file, result) {
     const out = [];
-    const push = (rule, key, title, detail) => {
-        out.push({ id: findingId(file, rule, key), file, rule, key, title, detail, severity: SEVERITY[rule] });
+    // The line does NOT participate in the id — a finding that merely moves within its
+    // file keeps its id, so `.polderignore` entries survive unrelated edits.
+    const push = (rule, key, title, detail, line) => {
+        out.push({ id: findingId(file, rule, key), file, rule, key, title, detail, severity: SEVERITY[rule], line });
     };
+    const componentLine = (name) => result.inlineDrift.componentLines[name];
     for (const sym of result.importDrift.symbols) {
-        push('import-drift', sym, sym, 'DS component imported from a local path instead of the package');
+        push('import-drift', sym, sym, 'DS component imported from a local path instead of the package', result.importDrift.lines[sym]);
     }
     for (const name of result.inlineDrift.localShadows) {
-        push('local-shadow', name, name, 'Component defined in-file with the same name as a DS export');
+        push('local-shadow', name, name, 'Component defined in-file with the same name as a DS export', componentLine(name));
     }
     for (const fp of result.inlineDrift.tokenFingerprints) {
-        push('token-fingerprint', fp.componentName, fp.componentName, [...fp.tokens, ...fp.classNames].join(', '));
+        push('token-fingerprint', fp.componentName, fp.componentName, [...fp.tokens, ...fp.classNames].join(', '), componentLine(fp.componentName));
     }
     for (const pm of result.inlineDrift.propMatches) {
-        push('prop-match', pm.componentName, `${pm.componentName} ~ ${pm.matchedDs}`, `${Math.round(pm.score * 100)}% prop overlap: ${pm.matchedProps.join(', ')}`);
+        push('prop-match', pm.componentName, `${pm.componentName} ~ ${pm.matchedDs}`, `${Math.round(pm.score * 100)}% prop overlap: ${pm.matchedProps.join(', ')}`, componentLine(pm.componentName));
     }
     for (const sm of result.inlineDrift.subComponentMatches) {
-        push('subcomponent', sm.componentName, `${sm.componentName} ~ ${sm.matchedDs}`, `${sm.confidence}: uses ${sm.subComponentsUsed.join(', ')}`);
+        push('subcomponent', sm.componentName, `${sm.componentName} ~ ${sm.matchedDs}`, `${sm.confidence}: uses ${sm.subComponentsUsed.join(', ')}`, componentLine(sm.componentName));
     }
     return out;
 }
@@ -34317,7 +34320,8 @@ function renderComment(findings, opts = {}) {
 function renderTable(findings) {
     const sorted = [...findings].sort((a, b) => RULE_ORDER.indexOf(a.rule) - RULE_ORDER.indexOf(b.rule) || a.file.localeCompare(b.file));
     const rows = sorted.map((f) => {
-        const where = f.commit ? `${f.file} \`@${f.commit.slice(0, 7)}\`` : f.file;
+        const location = f.line !== undefined ? `${f.file}:${f.line}` : f.file;
+        const where = f.commit ? `${location} \`@${f.commit.slice(0, 7)}\`` : location;
         return `| ${findings_1.RULE_LABEL[f.rule]} | \`${f.title}\` | ${f.detail} | ${where} | \`${f.id}\` |`;
     });
     return [
@@ -34921,7 +34925,7 @@ function isComponentFile(content) {
 function checkDrift(fileContent, dsExports, canonicalPkgs, allowlist, filename) {
     const isTsx = filename?.endsWith('.tsx') ?? false;
     if (!isTsx && !isComponentFile(fileContent)) {
-        return { driftCount: 0, driftedSymbols: [] };
+        return { driftCount: 0, driftedSymbols: [], lines: {} };
     }
     let ast;
     try {
@@ -34929,9 +34933,10 @@ function checkDrift(fileContent, dsExports, canonicalPkgs, allowlist, filename) 
     }
     catch {
         // @babel/parser couldn't parse this file even with errorRecovery
-        return { driftCount: 0, driftedSymbols: [] };
+        return { driftCount: 0, driftedSymbols: [], lines: {} };
     }
     const driftedSymbols = [];
+    const lines = {};
     for (const node of ast.program.body) {
         if (node.type !== 'ImportDeclaration')
             continue;
@@ -34960,20 +34965,27 @@ function checkDrift(fileContent, dsExports, canonicalPkgs, allowlist, filename) 
                         ? specifier.imported.name
                         : specifier.imported.value)
                     : specifier.local.name;
+                // Prefer the specifier's own line (multi-line import blocks), falling back
+                // to the declaration's.
+                const line = specifier.loc?.start.line ?? decl.loc?.start.line;
                 if (dsExports.size > 0 && dsExports.has(localName)) {
                     driftedSymbols.push(`${localName} from '${source}'`);
+                    if (line !== undefined)
+                        lines[`${localName} from '${source}'`] = line;
                 }
                 else if (dsExports.size === 0) {
                     // Fallback: no DS exports resolved — use path-only heuristic
                     // Only flag PascalCase symbols (likely components)
                     if (/^[A-Z]/.test(localName)) {
                         driftedSymbols.push(`${localName} from '${source}'`);
+                        if (line !== undefined)
+                            lines[`${localName} from '${source}'`] = line;
                     }
                 }
             }
         }
     }
-    return { driftCount: driftedSymbols.length, driftedSymbols };
+    return { driftCount: driftedSymbols.length, driftedSymbols, lines };
 }
 /**
  * Count "correct" DS usage: import specifiers pulled from a canonical package whose
@@ -35155,21 +35167,25 @@ function checkInlineDrift(fileContent, dsExports, filename, profile) {
     // Without a profile we can't know which DS the repo uses, so fall back to every
     // built-in. Callers that know the config should pass a profile (checkDriftFull does).
     const p = profile ?? (0, profiles_1.allBuiltinProfiles)();
+    const empty = () => ({
+        localShadows: [], tokenFingerprints: [], propMatches: [], subComponentMatches: [], componentLines: {},
+    });
     const isTsx = filename?.endsWith('.tsx') ?? false;
     if (!isTsx && !isComponentFile(fileContent)) {
-        return { localShadows: [], tokenFingerprints: [], propMatches: [], subComponentMatches: [] };
+        return empty();
     }
     let ast;
     try {
         ast = (0, parser_1.parse)(fileContent, BABEL_OPTIONS);
     }
     catch {
-        return { localShadows: [], tokenFingerprints: [], propMatches: [], subComponentMatches: [] };
+        return empty();
     }
     const localShadows = [];
     const tokenFingerprints = [];
     const propMatches = [];
     const subComponentMatches = [];
+    const componentLines = {};
     for (const topNode of ast.program.body) {
         // Unwrap `export function Foo` / `export const Foo = ...`
         const node = topNode.type === 'ExportNamedDeclaration' && topNode.declaration
@@ -35178,10 +35194,12 @@ function checkInlineDrift(fileContent, dsExports, filename, profile) {
         let componentName = null;
         let bodyRange = null;
         let funcParams = [];
+        let definitionLine;
         if (node.type === 'FunctionDeclaration' && node.id && /^[A-Z]/.test(node.id.name)) {
             componentName = node.id.name;
             bodyRange = nodeRange(node.body);
             funcParams = node.params;
+            definitionLine = node.loc?.start.line;
         }
         else if (node.type === 'VariableDeclaration') {
             for (const decl of node.declarations) {
@@ -35195,11 +35213,14 @@ function checkInlineDrift(fileContent, dsExports, filename, profile) {
                     componentName = name;
                     bodyRange = nodeRange(init.body);
                     funcParams = init.params;
+                    definitionLine = decl.loc?.start.line;
                 }
             }
         }
         if (!componentName)
             continue;
+        if (definitionLine !== undefined)
+            componentLines[componentName] = definitionLine;
         // Signal 1: name shadows a DS export
         if (dsExports.size > 0 && dsExports.has(componentName)) {
             localShadows.push(componentName);
@@ -35227,10 +35248,10 @@ function checkInlineDrift(fileContent, dsExports, filename, profile) {
             }
         }
     }
-    return { localShadows, tokenFingerprints, propMatches, subComponentMatches };
+    return { localShadows, tokenFingerprints, propMatches, subComponentMatches, componentLines };
 }
 function checkDriftFull(fileContent, dsExports, canonicalPkgs, allowlist, filename, profile) {
-    const { driftCount, driftedSymbols } = checkDrift(fileContent, dsExports, canonicalPkgs, allowlist, filename);
+    const { driftCount, driftedSymbols, lines } = checkDrift(fileContent, dsExports, canonicalPkgs, allowlist, filename);
     // Inline detection is DS-specific: only the profiles for the configured packages
     // apply (plus custom config data when the caller built the profile from config).
     const inlineDrift = checkInlineDrift(fileContent, dsExports, filename, profile ?? (0, profiles_1.buildDetectionProfile)(canonicalPkgs));
@@ -35239,7 +35260,7 @@ function checkDriftFull(fileContent, dsExports, canonicalPkgs, allowlist, filena
         inlineDrift.propMatches.length +
         inlineDrift.subComponentMatches.length;
     return {
-        importDrift: { count: driftCount, symbols: driftedSymbols },
+        importDrift: { count: driftCount, symbols: driftedSymbols, lines },
         inlineDrift,
         totalCount: driftCount + inlineCount,
     };

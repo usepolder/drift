@@ -168,14 +168,17 @@ describe('CLI suppression + finding ids', () => {
     }
   }
 
-  it('report carries stable 12-hex finding ids, shown in human output', () => {
+  it('report carries stable 12-hex finding ids and source lines, shown in human output', () => {
     withRepo({ 'drift.tsx': DRIFT }, (cwd) => {
       const report = buildReport(config, cwd, ['drift.tsx'], false);
       expect(report.files[0].findings).toHaveLength(1);
       const finding = report.files[0].findings[0];
       expect(finding.id).toMatch(/^[0-9a-f]{12}$/);
       expect(finding.rule).toBe('import-drift');
-      expect(formatHuman(report)).toContain(`[${finding.id}]`);
+      expect(finding.line).toBe(1); // the import sits on line 1 of DRIFT
+      const human = formatHuman(report);
+      expect(human).toContain(`[${finding.id}]`);
+      expect(human).toContain(':1'); // line gutter
     });
   });
 

@@ -125,13 +125,14 @@ polder-drift scan src/Button.tsx src/Modal.tsx
       "filename": "src/Modal.tsx",
       "totalCount": 2,
       "findings": [
-        { "id": "a1b2c3d4e5f6", "rule": "import-drift", "severity": "high",
+        { "id": "a1b2c3d4e5f6", "rule": "import-drift", "severity": "high", "line": 2,
           "title": "Button from './ui/Button'",
           "detail": "DS component imported from a local path instead of the package" },
-        { "id": "f6e5d4c3b2a1", "rule": "prop-match", "severity": "medium",
+        { "id": "f6e5d4c3b2a1", "rule": "prop-match", "severity": "medium", "line": 9,
           "title": "Modal ~ ComposedModal", "detail": "66% prop overlap: open, onClose" }
       ],
-      "importDrift": { "count": 1, "symbols": ["Button from './ui/Button'"] },
+      "importDrift": { "count": 1, "symbols": ["Button from './ui/Button'"],
+                       "lines": { "Button from './ui/Button'": 2 } },
       "inlineDrift": {
         "localShadows": [],
         "tokenFingerprints": [],
@@ -139,7 +140,8 @@ polder-drift scan src/Button.tsx src/Modal.tsx
           { "componentName": "Modal", "matchedDs": "ComposedModal",
             "matchedProps": ["open", "onClose"], "score": 0.66 }
         ],
-        "subComponentMatches": []
+        "subComponentMatches": [],
+        "componentLines": { "Modal": 9 }
       }
     }
   ]

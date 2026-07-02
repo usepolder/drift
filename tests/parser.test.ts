@@ -359,6 +359,21 @@ describe('checkDriftFull', () => {
     expect(result.inlineDrift.propMatches).toHaveLength(0);
   });
 
+  it('reports 1-based source lines for import drift and component signals', () => {
+    const content = [
+      `import * as React from 'react';`,            // line 1
+      `import { Button } from '../ui/Button';`,     // line 2 — import drift
+      `function Modal({ children }) {`,             // line 3 — local shadow
+      `  return <div style={{ color: '#da1e28' }}>{children}</div>;`,
+      `}`,
+      `export function Page() { return <Modal><Button /></Modal>; }`,
+    ].join('\n');
+    const result = checkDriftFull(content, DS_EXPORTS, CANONICAL, [], 'Page.tsx', CARBON_PROFILE);
+    expect(result.importDrift.lines[`Button from '../ui/Button'`]).toBe(2);
+    expect(result.inlineDrift.componentLines['Modal']).toBe(3);
+    expect(result.inlineDrift.componentLines['Page']).toBe(6);
+  });
+
   it('carbon canonical package → carbon profile derived automatically', () => {
     const content = `
       function PromoTile() {

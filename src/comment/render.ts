@@ -118,7 +118,8 @@ function renderTable(findings: Finding[]): string[] {
     (a, b) => RULE_ORDER.indexOf(a.rule) - RULE_ORDER.indexOf(b.rule) || a.file.localeCompare(b.file),
   );
   const rows = sorted.map((f) => {
-    const where = f.commit ? `${f.file} \`@${f.commit.slice(0, 7)}\`` : f.file;
+    const location = f.line !== undefined ? `${f.file}:${f.line}` : f.file;
+    const where = f.commit ? `${location} \`@${f.commit.slice(0, 7)}\`` : location;
     return `| ${RULE_LABEL[f.rule]} | \`${f.title}\` | ${f.detail} | ${where} | \`${f.id}\` |`;
   });
   return [
