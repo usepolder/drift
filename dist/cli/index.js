@@ -4142,6 +4142,8 @@ const path = __importStar(__nccwpck_require__(928));
 const child_process_1 = __nccwpck_require__(317);
 const resolve_config_1 = __nccwpck_require__(190);
 const parser_1 = __nccwpck_require__(196);
+const findings_1 = __nccwpck_require__(363);
+const suppress_1 = __nccwpck_require__(10);
 const init_1 = __nccwpck_require__(722);
 const SOURCE_RE = /\.(ts|tsx|js|jsx)$/;
 const TOP_HELP = `polder-drift — design system drift detection
@@ -4311,9 +4313,13 @@ function resolveDsExports(config, cwd) {
     }
     return dsExports;
 }
-function buildReport(config, cwd, files, effectiveFailOnDrift) {
+function buildReport(config, cwd, files, effectiveFailOnDrift, suppress) {
+    // Same `.polderignore` the CI comment honours — a locally-clean scan must mean a
+    // clean PR comment, so the CLI cannot skip suppression.
+    const rules = suppress ?? (0, suppress_1.loadSuppressions)(cwd);
     const dsExports = resolveDsExports(config, cwd);
     const fileReports = [];
+    let suppressedSignals = 0;
     for (const filename of files) {
         const filePath = path.isAbsolute(filename) ? filename : path.join(cwd, filename);
         let content;
@@ -4325,11 +4331,25 @@ function buildReport(config, cwd, files, effectiveFailOnDrift) {
             continue;
         }
         const result = (0, parser_1.checkDriftFull)(content, dsExports, config.componentLibrary, config.allowlist, filename);
+        const all = (0, findings_1.flattenFindings)(filename, result);
+        const kept = (0, suppress_1.applySuppressions)(all, rules);
+        suppressedSignals += all.length - kept.length;
+        // Filter the raw engine shapes down to what survived suppression, so the JSON
+        // report never disagrees with the findings list. Every rule keys on the same
+        // (rule, key) pair flattenFindings used.
+        const keep = new Set(kept.map((f) => `${f.rule}|${f.key}`));
+        const importSymbols = result.importDrift.symbols.filter((s) => keep.has(`import-drift|${s}`));
         fileReports.push({
             filename,
-            totalCount: result.totalCount,
-            importDrift: result.importDrift,
-            inlineDrift: result.inlineDrift,
+            totalCount: kept.length,
+            findings: kept.map(({ id, rule, severity, title, detail }) => ({ id, rule, severity, title, detail })),
+            importDrift: { symbols: importSymbols, count: importSymbols.length },
+            inlineDrift: {
+                localShadows: result.inlineDrift.localShadows.filter((n) => keep.has(`local-shadow|${n}`)),
+                tokenFingerprints: result.inlineDrift.tokenFingerprints.filter((fp) => keep.has(`token-fingerprint|${fp.componentName}`)),
+                propMatches: result.inlineDrift.propMatches.filter((pm) => keep.has(`prop-match|${pm.componentName}`)),
+                subComponentMatches: result.inlineDrift.subComponentMatches.filter((sm) => keep.has(`subcomponent|${sm.componentName}`)),
+            },
         });
     }
     const totalSignals = fileReports.reduce((s, r) => s + r.totalCount, 0);
@@ -4341,7 +4361,7 @@ function buildReport(config, cwd, files, effectiveFailOnDrift) {
             allowlist: config.allowlist,
             failOnDrift: effectiveFailOnDrift,
         },
-        summary: { filesAnalyzed: fileReports.length, filesWithDrift, totalSignals },
+        summary: { filesAnalyzed: fileReports.length, filesWithDrift, totalSignals, suppressedSignals },
         files: fileReports,
     };
 }
@@ -4349,34 +4369,22 @@ function buildReport(config, cwd, files, effectiveFailOnDrift) {
 function formatHuman(report) {
     const { summary } = report;
     const lines = [];
+    const suppressedNote = summary.suppressedSignals > 0 ? ` (${summary.suppressedSignals} suppressed via .polderignore)` : '';
     if (summary.totalSignals === 0) {
-        lines.push(`✓ No design system drift detected across ${summary.filesAnalyzed} file(s).`);
+        lines.push(`✓ No design system drift detected across ${summary.filesAnalyzed} file(s).${suppressedNote}`);
         return lines.join('\n');
     }
     lines.push(`⚠ ${summary.totalSignals} drift signal(s) across ${summary.filesWithDrift} of ` +
-        `${summary.filesAnalyzed} file(s) analysed.`);
+        `${summary.filesAnalyzed} file(s) analysed.${suppressedNote}`);
     lines.push('');
     for (const f of report.files) {
         if (f.totalCount === 0)
             continue;
         lines.push(`${f.filename}`);
-        for (const sym of f.importDrift.symbols) {
-            lines.push(`  import drift     ${sym} (imported locally instead of from the package)`);
-        }
-        for (const name of f.inlineDrift.localShadows) {
-            lines.push(`  local shadow     ${name} (shadows a DS export)`);
-        }
-        for (const fp of f.inlineDrift.tokenFingerprints) {
-            const signals = [...fp.tokens, ...fp.classNames].join(', ');
-            lines.push(`  token fingerprint ${fp.componentName} (${signals})`);
-        }
-        for (const pm of f.inlineDrift.propMatches) {
-            lines.push(`  prop match       ${pm.componentName} ~ ${pm.matchedDs} ` +
-                `(${Math.round(pm.score * 100)}%: ${pm.matchedProps.join(', ')})`);
-        }
-        for (const sm of f.inlineDrift.subComponentMatches) {
-            lines.push(`  subcomponent     ${sm.componentName} ~ ${sm.matchedDs} ` +
-                `(${sm.confidence}: ${sm.subComponentsUsed.join(', ')})`);
+        // The trailing [id] is the `.polderignore` handle for the finding.
+        for (const finding of f.findings) {
+            const label = findings_1.RULE_LABEL[finding.rule].toLowerCase().padEnd(18);
+            lines.push(`  ${label}${finding.title} (${finding.detail}) [${finding.id}]`);
         }
         lines.push('');
     }

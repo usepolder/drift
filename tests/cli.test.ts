@@ -144,6 +144,99 @@ describe('buildReport + formatHuman', () => {
   });
 });
 
+// The CLI must honour the same `.polderignore` the CI comment does, and expose the
+// stable finding ids that `.polderignore` entries are written against — otherwise a
+// suppression can only be authored/verified by pushing a PR.
+describe('CLI suppression + finding ids', () => {
+  const config: PolderConfig = {
+    componentLibrary: ['@acme/ds'],
+    allowlist: [],
+    failOnDrift: false,
+  };
+  const DRIFT = `import { Button } from './ui/Button';\nexport const X = () => <Button />;\n`;
+
+  function withRepo(files: Record<string, string>, fn: (cwd: string) => void): void {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'polder-suppress-'));
+    for (const [name, content] of Object.entries(files)) {
+      fs.mkdirSync(path.dirname(path.join(dir, name)), { recursive: true });
+      fs.writeFileSync(path.join(dir, name), content);
+    }
+    try {
+      fn(dir);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('report carries stable 12-hex finding ids, shown in human output', () => {
+    withRepo({ 'drift.tsx': DRIFT }, (cwd) => {
+      const report = buildReport(config, cwd, ['drift.tsx'], false);
+      expect(report.files[0].findings).toHaveLength(1);
+      const finding = report.files[0].findings[0];
+      expect(finding.id).toMatch(/^[0-9a-f]{12}$/);
+      expect(finding.rule).toBe('import-drift');
+      expect(formatHuman(report)).toContain(`[${finding.id}]`);
+    });
+  });
+
+  it('.polderignore id entry suppresses the finding everywhere in the report', () => {
+    withRepo({ 'drift.tsx': DRIFT }, (cwd) => {
+      const before = buildReport(config, cwd, ['drift.tsx'], false);
+      const id = before.files[0].findings[0].id;
+
+      fs.writeFileSync(path.join(cwd, '.polderignore'), `${id}\n`);
+      const after = buildReport(config, cwd, ['drift.tsx'], false);
+      expect(after.summary.totalSignals).toBe(0);
+      expect(after.summary.suppressedSignals).toBe(1);
+      expect(after.files[0].findings).toHaveLength(0);
+      expect(after.files[0].importDrift.symbols).toHaveLength(0); // raw shape filtered too
+      expect(formatHuman(after)).toContain('No design system drift');
+      expect(formatHuman(after)).toContain('1 suppressed via .polderignore');
+    });
+  });
+
+  it('rule: and path: entries suppress in the CLI like they do in CI', () => {
+    withRepo(
+      {
+        'drift.tsx': DRIFT,
+        'legacy/old.tsx': DRIFT,
+        '.polderignore': 'rule:import-drift\n',
+      },
+      (cwd) => {
+        const report = buildReport(config, cwd, ['drift.tsx', 'legacy/old.tsx'], false);
+        expect(report.summary.totalSignals).toBe(0);
+        expect(report.summary.suppressedSignals).toBe(2);
+      },
+    );
+    withRepo(
+      {
+        'drift.tsx': DRIFT,
+        'legacy/old.tsx': DRIFT,
+        '.polderignore': 'path:legacy/**\n',
+      },
+      (cwd) => {
+        const report = buildReport(config, cwd, ['drift.tsx', 'legacy/old.tsx'], false);
+        expect(report.summary.totalSignals).toBe(1); // drift.tsx still flagged
+        expect(report.summary.suppressedSignals).toBe(1);
+      },
+    );
+  });
+
+  it('suppressed drift does not trip --fail-on-drift', () => {
+    withRepo(
+      {
+        '.polder.yml': 'component_library: "@acme/ds"\n',
+        '.polderignore': 'rule:import-drift\n',
+        'drift.tsx': DRIFT,
+      },
+      (cwd) => {
+        const { code } = capture(() => runScan(['--cwd', cwd, '--fail-on-drift', 'drift.tsx']));
+        expect(code).toBe(0);
+      },
+    );
+  });
+});
+
 // Regression coverage for the `scan` subcommand refactor (IRON RULE). These pin the
 // top-level dispatch contract so a future change can't silently break invocation.
 describe('runCli dispatch', () => {
