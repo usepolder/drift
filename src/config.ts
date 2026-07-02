@@ -5,6 +5,12 @@ export interface PolderConfig extends CustomDetection {
   componentLibrary: string[];
   allowlist: string[];
   failOnDrift: boolean;
+  /**
+   * Where to resolve a package's exports when it isn't installed with usable types:
+   * package name → directory (relative to the repo root), e.g. a checkout of the
+   * design-system repo. See resolveDsSurface in parser.ts for the fallback chain.
+   */
+  libraryPaths?: Record<string, string>;
   // Custom detection data (all optional, from CustomDetection):
   //   tokens          — hex value → token label, powers token-fingerprint
   //   classPrefixes   — DS class-name prefixes, powers token-fingerprint
@@ -17,6 +23,7 @@ interface RawConfig {
   component_library?: string | string[];
   allowlist?: string[];
   fail_on_drift?: boolean;
+  library_paths?: Record<string, unknown>;
   tokens?: Record<string, unknown>;
   class_prefixes?: unknown[];
   prop_signatures?: Record<string, unknown>;
@@ -77,8 +84,29 @@ export function parseConfig(raw: string): PolderConfig {
     failOnDrift: cfg.fail_on_drift === true,
   };
 
+  if (cfg.library_paths !== undefined) {
+    const paths = requireStringMap(cfg.library_paths, 'library_paths');
+    // A path for a package that isn't canonical would never be consulted — that's
+    // almost certainly a typo'd package name, so fail loudly.
+    for (const pkg of Object.keys(paths)) {
+      if (!componentLibrary.includes(pkg)) {
+        throw new Error(`library_paths contains "${pkg}" which is not in component_library`);
+      }
+    }
+    config.libraryPaths = paths;
+  }
+
   // Custom detection data. Malformed entries throw (rather than being dropped) —
   // a silently-ignored typo here would look like the rule simply not working.
+  Object.assign(config, readCustomKeys(cfg));
+
+  return config;
+}
+
+/** Parse + validate the five custom-detection keys from a raw YAML object. */
+function readCustomKeys(cfg: RawConfig): CustomDetection {
+  const out: CustomDetection = {};
+
   if (cfg.tokens !== undefined) {
     const tokens: Record<string, string> = {};
     for (const [k, v] of Object.entries(requireStringMap(cfg.tokens, 'tokens'))) {
@@ -88,14 +116,14 @@ export function parseConfig(raw: string): PolderConfig {
       }
       tokens[hex] = v;
     }
-    config.tokens = tokens;
+    out.tokens = tokens;
   }
 
   if (cfg.class_prefixes !== undefined) {
     if (!Array.isArray(cfg.class_prefixes) || !cfg.class_prefixes.every((x) => typeof x === 'string' && x.length > 0)) {
       throw new Error('class_prefixes must be an array of non-empty strings');
     }
-    config.classPrefixes = cfg.class_prefixes as string[];
+    out.classPrefixes = cfg.class_prefixes as string[];
   }
 
   if (cfg.prop_signatures !== undefined) {
@@ -113,18 +141,37 @@ export function parseConfig(raw: string): PolderConfig {
       }
       signatures[name] = props as string[];
     }
-    config.propSignatures = signatures;
+    out.propSignatures = signatures;
   }
 
   if (cfg.sub_components !== undefined) {
-    config.subComponents = requireStringMap(cfg.sub_components, 'sub_components');
+    out.subComponents = requireStringMap(cfg.sub_components, 'sub_components');
   }
 
   if (cfg.name_segments !== undefined) {
-    config.nameSegments = requireStringMap(cfg.name_segments, 'name_segments');
+    out.nameSegments = requireStringMap(cfg.name_segments, 'name_segments');
   }
 
-  return config;
+  return out;
+}
+
+/**
+ * Parse a generated `.polder.profile.yml` (written by `polder-drift profile`).
+ * Accepts only the five custom-detection keys, validated exactly like `.polder.yml`;
+ * unknown keys are ignored so the file can carry generator metadata.
+ */
+export function parseProfileFile(raw: string): CustomDetection {
+  let parsed: unknown;
+  try {
+    parsed = yaml.load(raw);
+  } catch (err) {
+    throw new Error(`Invalid YAML in .polder.profile.yml: ${(err as Error).message}`);
+  }
+  if (parsed === null || parsed === undefined) return {};
+  if (typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('Invalid .polder.profile.yml: must be a YAML object');
+  }
+  return readCustomKeys(parsed as RawConfig);
 }
 
 export function readConfig(content: string | null): PolderConfig | null {

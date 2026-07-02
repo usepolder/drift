@@ -19,6 +19,7 @@ Bare `polder-drift` (no command) prints top-level help and exits `0`.
 | `scan` | Analyse files for design system drift (the default work). |
 | `ci` | Post the drift comment from a CI PR build (Azure DevOps). |
 | `init` | Write a starter `.polder.yml`, auto-detecting your design system. |
+| `profile` | Generate `.polder.profile.yml` from your design system's source. |
 | `-h`, `--help` | Show help. |
 
 `mcp` and `telemetry` are **reserved** command names (built in later phases). Running
@@ -174,6 +175,37 @@ instead. `ci` auto-detects the host from environment variables:
 It exits `1` only when `fail_on_drift: true` and the PR introduces new drift; `0`
 otherwise (including when there is no config). Full setup, required permissions, and
 gating: [Polder Drift on Azure DevOps](azure-pipelines.md).
+
+## `profile`
+
+```bash
+polder-drift profile [--force] [--cwd <dir>] [--config <path>]
+```
+
+Scans each `component_library` package's source — from `node_modules`, or the
+directory named in `library_paths` — and generates `.polder.profile.yml`
+([commands/profile.ts](../src/commands/profile.ts)): the auto-derived detection data
+that powers the inline rules for in-house design systems.
+
+What it derives, and the anti-noise filters applied
+([generate-profile.ts](../src/generate-profile.ts)):
+
+| Section | Derived from | Filtered out |
+|---|---|---|
+| `tokens` | Named hex constants (`brandCoral = '#ff3366'`) and CSS custom properties | Pure grays/white/black; test & story files |
+| `class_prefixes` | Repeated BEM-style literals (`acme--…`) | Prefixes seen fewer than 3 times |
+| `prop_signatures` | Component prop types (`XProps` interfaces, destructured params, `React.FC<XProps>`) | Ubiquitous props (`children`, `className`…); components with <2 distinctive props |
+| `sub_components` | Compound export naming (`CardHeader` → `Card`) | Suffixes outside a part vocabulary (`ButtonGroup` is not a part of `Button`) |
+| `name_segments` | Parents that own sub-components | Generic words (`Button`, `Input`, `List`…) |
+
+The output is a **reviewable file, not runtime magic**: check it, prune anything that
+looks generic, and commit it — every surface (scan, the Action, `ci`) loads it
+automatically, with `.polder.yml` keys taking precedence
+([resolve-config.ts](../src/resolve-config.ts)). An existing file is never
+overwritten without `--force` (it may contain hand edits).
+
+Exit codes: `0` written; `1` refused (file exists without `--force`, or nothing
+distinctive found — no file written); `2` config/usage error.
 
 ## `init`
 

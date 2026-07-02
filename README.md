@@ -39,14 +39,30 @@ allowlist: []                                   # symbols to ignore
 fail_on_drift: false                            # non-zero exit / failed check on drift
 ```
 
-DS exports are resolved from `node_modules`, so run your install step before either
-front end. If a package can't be resolved, it falls back to a PascalCase heuristic.
+This works with **any design system, including in-house ones**. DS exports are
+resolved from `node_modules` (built `.d.ts` first, then TS/JS source — so source-only
+monorepo workspace packages work), so run your install step before either front end.
+For a DS that lives in its own repo and is never published, check it out next to the
+app and point `library_paths` at it:
+
+```yaml
+component_library: "@your-org/design-system"
+library_paths:
+  "@your-org/design-system": ".polder/design-system"   # a checkout of the DS repo
+```
+
+If a package can't be resolved anywhere, it falls back to a PascalCase heuristic.
 
 The heuristic look-alike rules (token fingerprints, prop matches, sub-components) run
 off a per-DS detection profile: built-ins ship for Carbon (`@carbon/*`) and MUI
 (`@mui/*`), and any design system can supply its own via the optional `tokens`,
 `class_prefixes`, `prop_signatures`, `sub_components`, and `name_segments` config keys —
-see [Configuration](docs/reference-configuration.md#detection-profiles).
+see [Configuration](docs/reference-configuration.md#detection-profiles). Or generate
+that data straight from your design system's source:
+
+```bash
+npx @usepolder/drift profile   # writes .polder.profile.yml — review, prune, commit
+```
 
 ## CLI
 

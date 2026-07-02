@@ -4146,6 +4146,7 @@ const findings_1 = __nccwpck_require__(363);
 const suppress_1 = __nccwpck_require__(10);
 const profiles_1 = __nccwpck_require__(717);
 const init_1 = __nccwpck_require__(722);
+const profile_1 = __nccwpck_require__(463);
 const SOURCE_RE = /\.(ts|tsx|js|jsx)$/;
 const TOP_HELP = `polder-drift — design system drift detection
 
@@ -4156,6 +4157,7 @@ Commands:
   scan [options] [files...]   Analyse files for design system drift (default work)
   ci                          Post the drift comment from a CI PR build (Azure DevOps)
   init                        Write a starter .polder.yml (auto-detects your design system)
+  profile                     Generate .polder.profile.yml from your design system's source
   -h, --help                  Show this help
 
 Examples:
@@ -4301,13 +4303,15 @@ function discoverFiles(opts) {
 }
 // ── Analysis ────────────────────────────────────────────────────────────────────
 function resolveDsExports(config, cwd) {
-    const nodeModulesDir = path.join(cwd, 'node_modules');
     const dsExports = new Set();
     for (const pkg of config.componentLibrary) {
-        const pkgExports = (0, parser_1.resolveExports)(pkg, nodeModulesDir);
+        const libraryPath = config.libraryPaths?.[pkg];
+        const pkgExports = (0, parser_1.resolveDsSurface)(pkg, cwd, libraryPath);
         if (pkgExports.size === 0) {
-            process.stderr.write(`polder-drift: could not resolve exports for "${pkg}" from node_modules. ` +
-                `Run your install step first. Falling back to PascalCase heuristic.\n`);
+            const tried = libraryPath ? `node_modules or ${libraryPath}` : 'node_modules';
+            process.stderr.write(`polder-drift: could not resolve exports for "${pkg}" from ${tried}. ` +
+                `Run your install step first, or point library_paths."${pkg}" at the ` +
+                `package's repo/source. Falling back to PascalCase heuristic.\n`);
         }
         for (const name of pkgExports)
             dsExports.add(name);
@@ -4403,10 +4407,11 @@ function formatHuman(report) {
     return lines.join('\n').trimEnd();
 }
 // ── Subcommand dispatch ─────────────────────────────────────────────────────────
-// Reserved subcommand names. `ci` is built; `mcp`, `telemetry`, and `init` are reserved
-// now so the surface is stable and are built in later phases. To scan a file literally
-// named like a subcommand, use `polder-drift scan <file>` (scan takes paths explicitly).
-const RESERVED_SUBCOMMANDS = new Set(['scan', 'ci', 'mcp', 'telemetry', 'init']);
+// Reserved subcommand names. `ci`, `init`, and `profile` are built; `mcp` and
+// `telemetry` are reserved now so the surface is stable and are built in later phases.
+// To scan a file literally named like a subcommand, use `polder-drift scan <file>`
+// (scan takes paths explicitly).
+const RESERVED_SUBCOMMANDS = new Set(['scan', 'ci', 'mcp', 'telemetry', 'init', 'profile']);
 function runCli(argv) {
     const first = argv[0];
     if (first === undefined || first === '-h' || first === '--help') {
@@ -4424,6 +4429,9 @@ function runCli(argv) {
     }
     if (first === 'init') {
         return (0, init_1.runInitSubcommand)(argv.slice(1));
+    }
+    if (first === 'profile') {
+        return (0, profile_1.runProfileSubcommand)(argv.slice(1));
     }
     if (first === 'mcp' || first === 'telemetry') {
         process.stderr.write(`polder-drift: '${first}' is not available yet.\n`);
@@ -4617,6 +4625,211 @@ function runInitSubcommand(_argv, cwd = process.cwd()) {
     else {
         process.stdout.write('polder-drift init: wrote .polder.yml — edit component_library to your design system package.\n');
     }
+    return 0;
+}
+
+
+/***/ }),
+
+/***/ 463:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.runProfileSubcommand = runProfileSubcommand;
+/**
+ * `polder-drift profile` — scan the configured design system's source and generate
+ * `.polder.profile.yml`: auto-derived tokens, class prefixes, prop signatures, and
+ * sub-component maps that power the inline drift rules for in-house design systems.
+ *
+ * The output is a reviewable, committable file — generation never happens silently
+ * at scan time. `.polder.yml` keys override entries in this file.
+ */
+const fs = __importStar(__nccwpck_require__(896));
+const path = __importStar(__nccwpck_require__(928));
+const yaml = __importStar(__nccwpck_require__(281));
+const resolve_config_1 = __nccwpck_require__(190);
+const parser_1 = __nccwpck_require__(196);
+const profiles_1 = __nccwpck_require__(717);
+const generate_profile_1 = __nccwpck_require__(756);
+const HELP = `polder-drift profile — generate .polder.profile.yml from your design system's source
+
+Scans each package in component_library (from node_modules, or the directory named
+in library_paths) and derives:
+  tokens           named hex color constants (generic grays excluded)
+  class_prefixes   repeated BEM-style class prefixes (acme--…)
+  prop_signatures  distinctive component prop combinations
+  sub_components   compound components (CardHeader → Card)
+  name_segments    confidence-boost words for sub-component matches
+
+The result is written to ${resolve_config_1.PROFILE_FILENAME} for you to REVIEW, EDIT, and COMMIT.
+Every entry can create findings on PRs — delete anything that looks generic.
+Keys in .polder.yml override entries in this file.
+
+Usage:
+  polder-drift profile [options]
+
+Options:
+  --cwd <dir>       Working directory / repo root (default: process.cwd()).
+  --config <path>   Path to .polder.yml (default: <cwd>/.polder.yml).
+  --force           Overwrite an existing ${resolve_config_1.PROFILE_FILENAME}.
+  -h, --help        Show this help.
+
+Exit codes:
+  0  profile written
+  1  refused (file exists without --force, or nothing distinctive was found)
+  2  configuration or usage error
+`;
+function parseProfileArgs(argv) {
+    const opts = { cwd: process.cwd(), configPath: '', force: false, help: false };
+    for (let i = 0; i < argv.length; i++) {
+        const arg = argv[i];
+        switch (arg) {
+            case '-h':
+            case '--help':
+                opts.help = true;
+                break;
+            case '--force':
+                opts.force = true;
+                break;
+            case '--cwd':
+                opts.cwd = argv[++i] ?? '';
+                if (!opts.cwd)
+                    throw new Error('--cwd requires a path');
+                break;
+            case '--config':
+                opts.configPath = argv[++i] ?? '';
+                if (!opts.configPath)
+                    throw new Error('--config requires a path');
+                break;
+            default:
+                throw new Error(`unknown option: ${arg}`);
+        }
+    }
+    if (!opts.configPath)
+        opts.configPath = path.join(opts.cwd, '.polder.yml');
+    return opts;
+}
+/** YAML-serialise only the keys present, in snake_case, sorted for stable diffs. */
+function renderProfileYaml(data, packages) {
+    const body = {};
+    if (data.tokens)
+        body.tokens = data.tokens;
+    if (data.classPrefixes)
+        body.class_prefixes = data.classPrefixes;
+    if (data.propSignatures)
+        body.prop_signatures = data.propSignatures;
+    if (data.subComponents)
+        body.sub_components = data.subComponents;
+    if (data.nameSegments)
+        body.name_segments = data.nameSegments;
+    const header = `# Generated by \`polder-drift profile\` from: ${packages.join(', ')}\n` +
+        `# REVIEW BEFORE COMMITTING — every entry here can create findings on PRs.\n` +
+        `# Edit freely (deletions are respected until you regenerate with --force).\n` +
+        `# Keys in .polder.yml override entries in this file.\n`;
+    return header + yaml.dump(body, { sortKeys: true, lineWidth: 100 });
+}
+function runProfileSubcommand(argv) {
+    let opts;
+    try {
+        opts = parseProfileArgs(argv);
+    }
+    catch (err) {
+        process.stderr.write(`polder-drift: ${err.message}\n\n${HELP}`);
+        return 2;
+    }
+    if (opts.help) {
+        process.stdout.write(HELP);
+        return 0;
+    }
+    let resolved;
+    try {
+        resolved = (0, resolve_config_1.resolveConfig)(opts.cwd, opts.configPath);
+    }
+    catch (err) {
+        process.stderr.write(`polder-drift: invalid config — ${err.message}\n`);
+        return 2;
+    }
+    if (!resolved) {
+        process.stderr.write(`polder-drift profile: no .polder.yml at ${opts.configPath} and could not auto-detect ` +
+            `a design system. Run \`polder-drift init\` first.\n`);
+        return 2;
+    }
+    const config = resolved.config;
+    const target = path.join(opts.cwd, resolve_config_1.PROFILE_FILENAME);
+    if (fs.existsSync(target) && !opts.force) {
+        process.stderr.write(`polder-drift profile: ${resolve_config_1.PROFILE_FILENAME} already exists; leaving it untouched ` +
+            `(it may contain hand edits). Re-run with --force to overwrite.\n`);
+        return 1;
+    }
+    let data = {};
+    const scanned = [];
+    for (const pkg of config.componentLibrary) {
+        const libraryPath = config.libraryPaths?.[pkg];
+        // Prefer the repo checkout when configured — it has real source; node_modules
+        // may only carry built output.
+        const pkgDir = libraryPath
+            ? path.resolve(opts.cwd, libraryPath)
+            : path.join(opts.cwd, 'node_modules', pkg);
+        if (!fs.existsSync(pkgDir)) {
+            process.stderr.write(`polder-drift profile: "${pkg}" not found at ${pkgDir} — skipping. ` +
+                `Install it, or point library_paths."${pkg}" at its repo.\n`);
+            continue;
+        }
+        const dsExports = (0, parser_1.resolveDsSurface)(pkg, opts.cwd, libraryPath);
+        if (dsExports.size === 0) {
+            process.stderr.write(`polder-drift profile: could not resolve any exports for "${pkg}" — skipping.\n`);
+            continue;
+        }
+        const generated = (0, generate_profile_1.generateDetectionData)(pkgDir, dsExports);
+        data = (0, profiles_1.mergeCustomDetection)(data, generated.data);
+        scanned.push(pkg);
+        process.stderr.write(`polder-drift profile: ${pkg} — ${generated.stats.filesScanned} file(s), ` +
+            `${generated.stats.signatures} prop signature(s), ${generated.stats.tokens} token(s), ` +
+            `${generated.stats.subComponents} sub-component(s), ${generated.stats.classPrefixes} class prefix(es).\n`);
+    }
+    if (scanned.length === 0 || Object.keys(data).length === 0) {
+        process.stderr.write('polder-drift profile: nothing distinctive found — no file written. The export-based ' +
+            'rules (import-drift, local-shadow) work without a profile; you can also add the ' +
+            'detection keys to .polder.yml by hand.\n');
+        return 1;
+    }
+    fs.writeFileSync(target, renderProfileYaml(data, scanned));
+    process.stdout.write(`polder-drift profile: wrote ${resolve_config_1.PROFILE_FILENAME}. Review it, prune anything generic, ` +
+        `and commit — scan and the PR comment pick it up automatically.\n`);
     return 0;
 }
 
@@ -5092,6 +5305,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.parseConfig = parseConfig;
+exports.parseProfileFile = parseProfileFile;
 exports.readConfig = readConfig;
 const yaml = __importStar(__nccwpck_require__(281));
 const HEX_RE = /^#[0-9a-f]{6}$/;
@@ -5143,8 +5357,25 @@ function parseConfig(raw) {
         allowlist: Array.isArray(cfg.allowlist) ? cfg.allowlist.filter((x) => typeof x === 'string') : [],
         failOnDrift: cfg.fail_on_drift === true,
     };
+    if (cfg.library_paths !== undefined) {
+        const paths = requireStringMap(cfg.library_paths, 'library_paths');
+        // A path for a package that isn't canonical would never be consulted — that's
+        // almost certainly a typo'd package name, so fail loudly.
+        for (const pkg of Object.keys(paths)) {
+            if (!componentLibrary.includes(pkg)) {
+                throw new Error(`library_paths contains "${pkg}" which is not in component_library`);
+            }
+        }
+        config.libraryPaths = paths;
+    }
     // Custom detection data. Malformed entries throw (rather than being dropped) —
     // a silently-ignored typo here would look like the rule simply not working.
+    Object.assign(config, readCustomKeys(cfg));
+    return config;
+}
+/** Parse + validate the five custom-detection keys from a raw YAML object. */
+function readCustomKeys(cfg) {
+    const out = {};
     if (cfg.tokens !== undefined) {
         const tokens = {};
         for (const [k, v] of Object.entries(requireStringMap(cfg.tokens, 'tokens'))) {
@@ -5154,13 +5385,13 @@ function parseConfig(raw) {
             }
             tokens[hex] = v;
         }
-        config.tokens = tokens;
+        out.tokens = tokens;
     }
     if (cfg.class_prefixes !== undefined) {
         if (!Array.isArray(cfg.class_prefixes) || !cfg.class_prefixes.every((x) => typeof x === 'string' && x.length > 0)) {
             throw new Error('class_prefixes must be an array of non-empty strings');
         }
-        config.classPrefixes = cfg.class_prefixes;
+        out.classPrefixes = cfg.class_prefixes;
     }
     if (cfg.prop_signatures !== undefined) {
         if (typeof cfg.prop_signatures !== 'object' || cfg.prop_signatures === null || Array.isArray(cfg.prop_signatures)) {
@@ -5177,15 +5408,35 @@ function parseConfig(raw) {
             }
             signatures[name] = props;
         }
-        config.propSignatures = signatures;
+        out.propSignatures = signatures;
     }
     if (cfg.sub_components !== undefined) {
-        config.subComponents = requireStringMap(cfg.sub_components, 'sub_components');
+        out.subComponents = requireStringMap(cfg.sub_components, 'sub_components');
     }
     if (cfg.name_segments !== undefined) {
-        config.nameSegments = requireStringMap(cfg.name_segments, 'name_segments');
+        out.nameSegments = requireStringMap(cfg.name_segments, 'name_segments');
     }
-    return config;
+    return out;
+}
+/**
+ * Parse a generated `.polder.profile.yml` (written by `polder-drift profile`).
+ * Accepts only the five custom-detection keys, validated exactly like `.polder.yml`;
+ * unknown keys are ignored so the file can carry generator metadata.
+ */
+function parseProfileFile(raw) {
+    let parsed;
+    try {
+        parsed = yaml.load(raw);
+    }
+    catch (err) {
+        throw new Error(`Invalid YAML in .polder.profile.yml: ${err.message}`);
+    }
+    if (parsed === null || parsed === undefined)
+        return {};
+    if (typeof parsed !== 'object' || Array.isArray(parsed)) {
+        throw new Error('Invalid .polder.profile.yml: must be a YAML object');
+    }
+    return readCustomKeys(parsed);
 }
 function readConfig(content) {
     if (content === null)
@@ -5285,6 +5536,375 @@ function detectComponentLibrary(cwd, known = exports.KNOWN_DS_PACKAGES) {
 
 /***/ }),
 
+/***/ 756:
+/***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
+
+
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.collectSourceFiles = collectSourceFiles;
+exports.extractFileFacts = extractFileFacts;
+exports.generateDetectionData = generateDetectionData;
+/**
+ * Auto-derive custom-detection data (the `.polder.profile.yml` content) from a
+ * design system's own source: prop signatures from component prop types, tokens from
+ * named color constants, sub-component maps from compound naming, class prefixes
+ * from repeated BEM-style literals.
+ *
+ * The whole design bends toward PRECISION: a generated entry can create findings on
+ * every PR in the repo, so anything generic gets filtered out and the output is a
+ * reviewable file, never invisible runtime magic. Better to emit nothing than noise.
+ */
+const fs = __importStar(__nccwpck_require__(896));
+const path = __importStar(__nccwpck_require__(928));
+const parser_1 = __nccwpck_require__(429);
+const BABEL_OPTIONS = {
+    plugins: ['typescript', 'jsx'],
+    sourceType: 'module',
+    errorRecovery: true,
+};
+// ── Anti-noise vocabularies ───────────────────────────────────────────────────
+// Never included in a signature: present on virtually every React component.
+const UBIQUITOUS_PROPS = new Set([
+    'children', 'className', 'style', 'key', 'ref', 'as', 'sx', 'css', 'id',
+    'role', 'tabIndex', 'dangerouslySetInnerHTML', 'testId', 'dataTestId',
+]);
+// Allowed in a signature but too common to count as distinctive on their own.
+const COMMON_PROPS = new Set([
+    'onClick', 'onChange', 'onClose', 'onOpen', 'onFocus', 'onBlur', 'onSubmit',
+    'value', 'defaultValue', 'checked', 'disabled', 'readOnly', 'required', 'loading',
+    'size', 'name', 'type', 'title', 'label', 'placeholder', 'href', 'target',
+    'src', 'alt', 'open', 'variant', 'color', 'width', 'height', 'active', 'selected',
+]);
+// Component-name words too generic to key the name-segment confidence boost on
+// (a local `ButtonGroup` must not be suspect on its name alone).
+const GENERIC_NAME_WORDS = new Set([
+    'Button', 'Input', 'Text', 'Icon', 'List', 'Link', 'Box', 'Grid', 'Stack',
+    'Container', 'Item', 'View', 'Row', 'Col', 'Column', 'Label', 'Form', 'Field',
+    'Group', 'Header', 'Footer', 'Page', 'App', 'Nav', 'Menu', 'Image', 'Wrapper',
+    'Section', 'Content', 'Title', 'Layout', 'Base', 'Root',
+]);
+// Suffixes that mark a "part of a parent" component (CardHeader, DialogActions…).
+// A name-prefix pair only becomes a sub-component mapping when the remainder is one
+// of these — so ButtonGroup is NOT treated as a part of Button.
+const PART_SUFFIXES = new Set([
+    'Header', 'Footer', 'Body', 'Content', 'Title', 'Subtitle', 'Actions', 'Action',
+    'Media', 'Summary', 'Details', 'Description', 'Text', 'Icon', 'Item', 'Items',
+    'Cell', 'Panel', 'Panels', 'Trigger', 'Indicator', 'Thumb', 'Track', 'Overlay',
+    'Portal', 'Anchor', 'Separator', 'Divider', 'Dot', 'Connector', 'Toolbar', 'Caption',
+]);
+const SIGNATURE_MAX_PROPS = 8;
+const SIGNATURE_MIN_DISTINCTIVE = 2;
+const SIGNATURE_MIN_TOTAL = 3;
+const CLASS_PREFIX_MIN_OCCURRENCES = 3;
+const MAX_TOKENS = 64;
+const MAX_FILES = 3000;
+const SKIP_DIRS = new Set([
+    'node_modules', '.git', 'dist', 'build', 'out', 'coverage',
+    '__tests__', '__mocks__', '__snapshots__', 'storybook-static',
+]);
+const SOURCE_FILE_RE = /\.(ts|tsx|js|jsx)$/;
+const NON_COMPONENT_FILE_RE = /\.(test|spec|stories)\.|\.stories\./;
+// ── File collection ───────────────────────────────────────────────────────────
+function collectSourceFiles(pkgDir) {
+    const files = [];
+    const stack = [pkgDir];
+    while (stack.length > 0 && files.length < MAX_FILES) {
+        const dir = stack.pop();
+        let entries;
+        try {
+            entries = fs.readdirSync(dir, { withFileTypes: true });
+        }
+        catch {
+            continue;
+        }
+        for (const e of entries) {
+            const p = path.join(dir, e.name);
+            if (e.isDirectory()) {
+                if (!SKIP_DIRS.has(e.name) && !e.name.startsWith('.'))
+                    stack.push(p);
+            }
+            else if (e.isFile() && SOURCE_FILE_RE.test(e.name) && !NON_COMPONENT_FILE_RE.test(e.name)) {
+                files.push(p);
+            }
+        }
+    }
+    return files.sort();
+}
+function typeLiteralMembers(typeNode) {
+    if (!typeNode || typeNode.type !== 'TSTypeLiteral')
+        return [];
+    const names = [];
+    for (const m of typeNode.members ?? []) {
+        if ((m.type === 'TSPropertySignature' || m.type === 'TSMethodSignature') && m.key?.type === 'Identifier') {
+            names.push(m.key.name);
+        }
+    }
+    return names;
+}
+function interfaceMembers(node) {
+    const names = [];
+    for (const m of node.body?.body ?? []) {
+        if ((m.type === 'TSPropertySignature' || m.type === 'TSMethodSignature') && m.key?.type === 'Identifier') {
+            names.push(m.key.name);
+        }
+    }
+    return names;
+}
+function paramFacts(params) {
+    const out = { destructured: [] };
+    const first = params?.[0];
+    if (!first)
+        return out;
+    if (first.type === 'ObjectPattern') {
+        for (const prop of first.properties ?? []) {
+            if (prop.type === 'ObjectProperty' && prop.key?.type === 'Identifier') {
+                out.destructured.push(prop.key.name);
+            }
+        }
+    }
+    const ann = first.typeAnnotation?.typeAnnotation;
+    if (ann?.type === 'TSTypeReference' && ann.typeName?.type === 'Identifier') {
+        out.propsTypeName = ann.typeName.name;
+    }
+    return out;
+}
+/** Declared props type from a `const X: React.FC<XProps>` style annotation. */
+function fcPropsTypeName(declarator) {
+    const ann = declarator.id?.typeAnnotation?.typeAnnotation;
+    if (ann?.type !== 'TSTypeReference')
+        return undefined;
+    const name = ann.typeName?.type === 'Identifier'
+        ? ann.typeName.name
+        : ann.typeName?.type === 'TSQualifiedName'
+            ? ann.typeName.right?.name
+            : undefined;
+    if (name !== 'FC' && name !== 'FunctionComponent' && name !== 'VFC')
+        return undefined;
+    const arg = ann.typeParameters?.params?.[0];
+    if (arg?.type === 'TSTypeReference' && arg.typeName?.type === 'Identifier')
+        return arg.typeName.name;
+    return undefined;
+}
+function extractFileFacts(content) {
+    const facts = { typeMembers: new Map(), components: new Map() };
+    let ast;
+    try {
+        ast = (0, parser_1.parse)(content, BABEL_OPTIONS);
+    }
+    catch {
+        return facts;
+    }
+    for (const top of ast.program.body) {
+        const node = (top.type === 'ExportNamedDeclaration' || top.type === 'ExportDefaultDeclaration') && top.declaration
+            ? top.declaration
+            : top;
+        if (node.type === 'TSInterfaceDeclaration' && node.id?.name) {
+            facts.typeMembers.set(node.id.name, interfaceMembers(node));
+        }
+        else if (node.type === 'TSTypeAliasDeclaration' && node.id?.name) {
+            const members = typeLiteralMembers(node.typeAnnotation);
+            if (members.length > 0)
+                facts.typeMembers.set(node.id.name, members);
+        }
+        else if (node.type === 'FunctionDeclaration' && node.id && /^[A-Z]/.test(node.id.name)) {
+            facts.components.set(node.id.name, paramFacts(node.params));
+        }
+        else if (node.type === 'VariableDeclaration') {
+            for (const decl of node.declarations) {
+                if (decl.id?.type !== 'Identifier' || !/^[A-Z]/.test(decl.id.name) || !decl.init)
+                    continue;
+                if (decl.init.type === 'ArrowFunctionExpression' || decl.init.type === 'FunctionExpression') {
+                    const p = paramFacts(decl.init.params);
+                    p.propsTypeName = p.propsTypeName ?? fcPropsTypeName(decl);
+                    facts.components.set(decl.id.name, p);
+                }
+            }
+        }
+    }
+    return facts;
+}
+/* eslint-enable @typescript-eslint/no-explicit-any */
+// Named hex assignments: `coral: '#ff3366'`, `export const brandRed = "#da1e28"`,
+// and CSS custom properties in template CSS: `--brand-coral: #ff3366`.
+const NAMED_HEX_RE = /([A-Za-z_$][A-Za-z0-9_$]*)\s*[:=]\s*['"]#([0-9a-fA-F]{6})['"]/g;
+const CSS_VAR_HEX_RE = /(--[a-z][a-z0-9-]*)\s*:\s*#([0-9a-fA-F]{6})\b/g;
+// BEM-ish DS class prefixes: the `acme` of `acme--button` in a string literal.
+const CLASS_PREFIX_RE = /['"`]([a-z][a-z0-9]*(?:-[a-z0-9]+)*)--[a-z]/g;
+function isLowSpecificityHex(hex) {
+    // Pure grays (incl. #ffffff/#000000) show up in any codebase — never tokens.
+    const [r, g, b] = [hex.slice(1, 3), hex.slice(3, 5), hex.slice(5, 7)];
+    return r === g && g === b;
+}
+function buildSignature(props) {
+    const seen = new Set();
+    const distinctive = [];
+    const common = [];
+    for (const p of props) {
+        if (seen.has(p) || UBIQUITOUS_PROPS.has(p))
+            continue;
+        seen.add(p);
+        (COMMON_PROPS.has(p) ? common : distinctive).push(p);
+    }
+    if (distinctive.length < SIGNATURE_MIN_DISTINCTIVE)
+        return null;
+    const signature = [...distinctive, ...common].slice(0, SIGNATURE_MAX_PROPS);
+    return signature.length >= SIGNATURE_MIN_TOTAL ? signature : null;
+}
+function splitPascal(name) {
+    return name.match(/[A-Z][a-z0-9]*/g) ?? [];
+}
+/**
+ * Derive detection data for one design system. `dsExports` is the package's resolved
+ * export surface (resolveDsSurface) — only exported components produce entries.
+ */
+function generateDetectionData(pkgDir, dsExports) {
+    const files = collectSourceFiles(pkgDir);
+    const typeMembers = new Map();
+    const components = new Map();
+    const tokens = {};
+    const prefixCounts = new Map();
+    for (const file of files) {
+        let content;
+        try {
+            content = fs.readFileSync(file, 'utf8');
+        }
+        catch {
+            continue;
+        }
+        const facts = extractFileFacts(content);
+        for (const [k, v] of facts.typeMembers)
+            if (!typeMembers.has(k))
+                typeMembers.set(k, v);
+        for (const [k, v] of facts.components)
+            if (!components.has(k))
+                components.set(k, v);
+        let m;
+        NAMED_HEX_RE.lastIndex = 0;
+        while ((m = NAMED_HEX_RE.exec(content)) !== null) {
+            const hex = `#${m[2].toLowerCase()}`;
+            if (!isLowSpecificityHex(hex) && tokens[hex] === undefined)
+                tokens[hex] = m[1];
+        }
+        CSS_VAR_HEX_RE.lastIndex = 0;
+        while ((m = CSS_VAR_HEX_RE.exec(content)) !== null) {
+            const hex = `#${m[2].toLowerCase()}`;
+            if (!isLowSpecificityHex(hex) && tokens[hex] === undefined)
+                tokens[hex] = m[1];
+        }
+        CLASS_PREFIX_RE.lastIndex = 0;
+        while ((m = CLASS_PREFIX_RE.exec(content)) !== null) {
+            prefixCounts.set(m[1], (prefixCounts.get(m[1]) ?? 0) + 1);
+        }
+    }
+    // Prop signatures: exported components only, distinctiveness-gated.
+    const propSignatures = {};
+    const exported = [...dsExports].filter((n) => /^[A-Z]/.test(n)).sort();
+    for (const name of exported) {
+        const comp = components.get(name);
+        const fromConvention = typeMembers.get(`${name}Props`) ?? [];
+        const fromDeclared = comp?.propsTypeName ? (typeMembers.get(comp.propsTypeName) ?? []) : [];
+        const merged = [...fromConvention, ...fromDeclared, ...(comp?.destructured ?? [])];
+        if (merged.length === 0)
+            continue;
+        const signature = buildSignature(merged);
+        if (signature)
+            propSignatures[name] = signature;
+    }
+    // Sub-components: exported X whose longest exported proper prefix P leaves a
+    // remainder in the part-suffix vocabulary → X belongs to P.
+    const subComponents = {};
+    const exportedSet = new Set(exported);
+    for (const name of exported) {
+        let parent = null;
+        for (let cut = name.length - 1; cut >= 2; cut--) {
+            const prefix = name.slice(0, cut);
+            if (exportedSet.has(prefix) && PART_SUFFIXES.has(name.slice(cut))) {
+                parent = prefix;
+                break; // longest prefix wins
+            }
+        }
+        if (parent)
+            subComponents[name] = parent;
+    }
+    // Name segments: for each parent that owns sub-components, key on its last
+    // PascalCase word (AcmeCard → "Card"), matching how the engine splits local
+    // component names. Generic words never become segments — a local `ButtonGroup`
+    // must not be suspect on its name alone.
+    const nameSegments = {};
+    for (const parent of new Set(Object.values(subComponents))) {
+        const words = splitPascal(parent);
+        const segment = words[words.length - 1];
+        if (segment && !GENERIC_NAME_WORDS.has(segment))
+            nameSegments[segment] = parent;
+    }
+    const classPrefixes = [...prefixCounts.entries()]
+        .filter(([, count]) => count >= CLASS_PREFIX_MIN_OCCURRENCES)
+        .map(([prefix]) => `${prefix}--`)
+        .sort();
+    const cappedTokens = {};
+    for (const [hex, label] of Object.entries(tokens).slice(0, MAX_TOKENS))
+        cappedTokens[hex] = label;
+    const data = {};
+    if (Object.keys(cappedTokens).length > 0)
+        data.tokens = cappedTokens;
+    if (classPrefixes.length > 0)
+        data.classPrefixes = classPrefixes;
+    if (Object.keys(propSignatures).length > 0)
+        data.propSignatures = propSignatures;
+    if (Object.keys(subComponents).length > 0)
+        data.subComponents = subComponents;
+    if (Object.keys(nameSegments).length > 0)
+        data.nameSegments = nameSegments;
+    return {
+        data,
+        stats: {
+            filesScanned: files.length,
+            componentsSeen: components.size,
+            signatures: Object.keys(propSignatures).length,
+            tokens: Object.keys(cappedTokens).length,
+            subComponents: Object.keys(subComponents).length,
+            nameSegments: Object.keys(nameSegments).length,
+            classPrefixes: classPrefixes.length,
+        },
+    };
+}
+
+
+/***/ }),
+
 /***/ 196:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
@@ -5325,6 +5945,9 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.DS_PROP_SIGNATURES = exports.DS_NAME_SEGMENTS = exports.DS_SUBCOMPONENT_MAP = exports.MUI_TOKENS = exports.CARBON_TOKENS = void 0;
 exports.resolveExports = resolveExports;
+exports.resolveDtsExports = resolveDtsExports;
+exports.resolveSourceExports = resolveSourceExports;
+exports.resolveDsSurface = resolveDsSurface;
 exports.isComponentFile = isComponentFile;
 exports.checkDrift = checkDrift;
 exports.countCanonicalUsages = countCanonicalUsages;
@@ -5383,16 +6006,20 @@ function resolveFile(filePath) {
     return null;
 }
 function resolveExports(pkgName, nodeModulesDir) {
+    return resolveDtsExports(path.join(nodeModulesDir, pkgName));
+}
+/** Exports read from a package directory's .d.ts files (types entry or per-file). */
+function resolveDtsExports(pkgDir) {
     const names = new Set();
     try {
-        const pkgJsonPath = path.join(nodeModulesDir, pkgName, 'package.json');
+        const pkgJsonPath = path.join(pkgDir, 'package.json');
         const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
         // When the package has no types entry but ships one .d.ts per export (e.g.
         // @carbon/icons-react), collect names from .d.ts filenames in the lib/ dir.
         if (!pkgJson.types && !pkgJson.typings) {
             const candidates = ['lib', 'es', 'dist', '.'];
             for (const dir of candidates) {
-                const dirPath = path.join(nodeModulesDir, pkgName, dir);
+                const dirPath = path.join(pkgDir, dir);
                 try {
                     for (const f of fs.readdirSync(dirPath)) {
                         if (f.endsWith('.d.ts') && f !== 'index.d.ts') {
@@ -5407,8 +6034,7 @@ function resolveExports(pkgName, nodeModulesDir) {
             return names;
         }
         const typesEntry = pkgJson.types ?? pkgJson.typings ?? 'index.d.ts';
-        const rootDtsPath = path.join(nodeModulesDir, pkgName, typesEntry);
-        const rootDir = path.dirname(rootDtsPath);
+        const rootDtsPath = path.join(pkgDir, typesEntry);
         // BFS over export * chains — queue holds absolute paths already resolved to .d.ts
         const visited = new Set();
         const queue = [rootDtsPath];
@@ -5434,9 +6060,151 @@ function resolveExports(pkgName, nodeModulesDir) {
         }
     }
     catch {
-        // node_modules not present or .d.ts missing/malformed — caller handles warning
+        // package dir not present or .d.ts missing/malformed — caller handles warning
     }
     return names;
+}
+// ── Source-based export resolution (bring-your-own design system) ─────────────
+//
+// In-house design systems are often source-only: a monorepo workspace package or a
+// sibling repo checkout shipping raw .ts/.tsx with no built .d.ts. For those, walk
+// the source barrel with the Babel parser — same BFS shape as the .d.ts walker.
+// Conventional barrel locations, tried when package.json has no usable source entry.
+const SOURCE_ENTRY_CANDIDATES = [
+    'src/index.ts', 'src/index.tsx', 'index.ts', 'index.tsx',
+    'src/index.js', 'src/index.jsx', 'index.js', 'index.jsx',
+];
+const SOURCE_FILE_RE = /\.(ts|tsx|js|jsx)$/;
+// Safety valve for pathological export-star webs; a DS surface fits well within this.
+const MAX_SOURCE_FILES = 2000;
+function isFile(p) {
+    try {
+        return fs.statSync(p).isFile();
+    }
+    catch {
+        return false;
+    }
+}
+function resolveSourceEntry(pkgDir) {
+    try {
+        const pkgJson = JSON.parse(fs.readFileSync(path.join(pkgDir, 'package.json'), 'utf8'));
+        for (const entry of [pkgJson.source, pkgJson.module, pkgJson.main]) {
+            if (entry && SOURCE_FILE_RE.test(entry) && isFile(path.join(pkgDir, entry))) {
+                return path.join(pkgDir, entry);
+            }
+        }
+    }
+    catch { /* no package.json — a bare source checkout is fine, try conventions */ }
+    for (const rel of SOURCE_ENTRY_CANDIDATES) {
+        if (isFile(path.join(pkgDir, rel)))
+            return path.join(pkgDir, rel);
+    }
+    return null;
+}
+/** Node-ish resolution of a relative `from './x'` specifier to a source file. */
+function resolveSourceModule(fromFile, specifier) {
+    const base = path.resolve(path.dirname(fromFile), specifier);
+    const candidates = [
+        base, `${base}.ts`, `${base}.tsx`, `${base}.js`, `${base}.jsx`,
+        path.join(base, 'index.ts'), path.join(base, 'index.tsx'),
+        path.join(base, 'index.js'), path.join(base, 'index.jsx'),
+    ];
+    for (const c of candidates) {
+        if (isFile(c))
+            return c;
+    }
+    return null;
+}
+/**
+ * Exports read from a package's SOURCE files: find the barrel (package.json
+ * source/module/main pointing at .ts/.tsx, else src/index.ts and friends) and walk
+ * `export` statements, following relative `export * from` chains.
+ */
+function resolveSourceExports(pkgDir) {
+    const names = new Set();
+    const entry = resolveSourceEntry(pkgDir);
+    if (!entry)
+        return names;
+    const visited = new Set();
+    const queue = [entry];
+    while (queue.length > 0 && visited.size < MAX_SOURCE_FILES) {
+        const current = queue.shift();
+        if (visited.has(current))
+            continue;
+        visited.add(current);
+        let content;
+        try {
+            content = fs.readFileSync(current, 'utf8');
+        }
+        catch {
+            continue;
+        }
+        const ast = parseSource(content);
+        if (!ast)
+            continue;
+        for (const node of ast.program.body) {
+            if (node.type === 'ExportNamedDeclaration') {
+                const d = node.declaration;
+                if (d) {
+                    if ((d.type === 'FunctionDeclaration' || d.type === 'ClassDeclaration' ||
+                        d.type === 'TSInterfaceDeclaration' || d.type === 'TSTypeAliasDeclaration' ||
+                        d.type === 'TSEnumDeclaration') && d.id) {
+                        names.add(d.id.name);
+                    }
+                    else if (d.type === 'VariableDeclaration') {
+                        for (const decl of d.declarations) {
+                            if (decl.id.type === 'Identifier')
+                                names.add(decl.id.name);
+                        }
+                    }
+                }
+                for (const spec of node.specifiers) {
+                    if (spec.type === 'ExportSpecifier') {
+                        const exported = spec.exported.type === 'Identifier' ? spec.exported.name : spec.exported.value;
+                        if (exported !== 'default')
+                            names.add(exported);
+                    }
+                    else if (spec.type === 'ExportNamespaceSpecifier' && spec.exported.type === 'Identifier') {
+                        // `export * as Tokens from './tokens'` — the namespace itself is the export
+                        names.add(spec.exported.name);
+                    }
+                }
+            }
+            else if (node.type === 'ExportAllDeclaration' && node.source.value.startsWith('.')) {
+                const resolved = resolveSourceModule(current, node.source.value);
+                if (resolved)
+                    queue.push(resolved);
+            }
+        }
+    }
+    return names;
+}
+/**
+ * Full resolution chain for one configured DS package — this is what makes the tool
+ * work against ANY design system, not just published ones with built types:
+ *
+ *   1. node_modules .d.ts        — installed package with type declarations
+ *   2. library_paths dir, .d.ts  — a local checkout of the DS repo that ships types
+ *   3. library_paths dir, source — a source-only DS repo checkout
+ *   4. node_modules source       — a monorepo workspace package without built types
+ *
+ * Empty result means nothing resolved anywhere; callers warn and fall back to the
+ * PascalCase heuristic.
+ */
+function resolveDsSurface(pkg, cwd, libraryPath) {
+    const installedDir = path.join(cwd, 'node_modules', pkg);
+    let names = resolveDtsExports(installedDir);
+    if (names.size > 0)
+        return names;
+    if (libraryPath) {
+        const dir = path.resolve(cwd, libraryPath);
+        names = resolveDtsExports(dir);
+        if (names.size === 0)
+            names = resolveSourceExports(dir);
+        if (names.size > 0)
+            return names;
+    }
+    return resolveSourceExports(installedDir);
 }
 function isComponentFile(content) {
     if (/<[A-Z][a-zA-Z]*[\s/>]/.test(content))
@@ -6071,11 +6839,35 @@ function diffChangedFiles(cwd, baseRef) {
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.MUI_PROFILE = exports.CARBON_PROFILE = void 0;
 exports.emptyProfile = emptyProfile;
+exports.mergeCustomDetection = mergeCustomDetection;
 exports.mergeProfiles = mergeProfiles;
 exports.buildDetectionProfile = buildDetectionProfile;
 exports.allBuiltinProfiles = allBuiltinProfiles;
 function emptyProfile() {
     return { tokens: {}, classPatterns: [], propSignatures: {}, subComponentMap: {}, nameSegments: {} };
+}
+/**
+ * Merge two CustomDetection layers: `extra` wins per entry (records) and unions
+ * (prefix lists). Used to underlay a generated `.polder.profile.yml` beneath the
+ * hand-written `.polder.yml` keys, so manual config always has the last word.
+ */
+function mergeCustomDetection(base, extra) {
+    const out = {};
+    if (base.tokens || extra.tokens)
+        out.tokens = { ...base.tokens, ...extra.tokens };
+    if (base.classPrefixes || extra.classPrefixes) {
+        out.classPrefixes = [...new Set([...(base.classPrefixes ?? []), ...(extra.classPrefixes ?? [])])];
+    }
+    if (base.propSignatures || extra.propSignatures) {
+        out.propSignatures = { ...base.propSignatures, ...extra.propSignatures };
+    }
+    if (base.subComponents || extra.subComponents) {
+        out.subComponents = { ...base.subComponents, ...extra.subComponents };
+    }
+    if (base.nameSegments || extra.nameSegments) {
+        out.nameSegments = { ...base.nameSegments, ...extra.nameSegments };
+    }
+    return out;
 }
 // ── Carbon Design System (@carbon/*) ─────────────────────────────────────────
 // Carbon v11 (White theme) — high-specificity hex tokens. Values common to any UI
@@ -6351,16 +7143,24 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.PROFILE_FILENAME = void 0;
 exports.resolveConfig = resolveConfig;
 /**
  * Resolve a PolderConfig for a run. Precedence:
  *   1. An explicit `.polder.yml` (always wins; throws on invalid YAML).
  *   2. Otherwise, zero-config detection of the DS package from package.json.
  *   3. Otherwise null (caller shows guidance).
+ *
+ * Either way, a generated `.polder.profile.yml` (from `polder-drift profile`) is
+ * loaded as an UNDERLAY for the custom-detection keys: it fills in what the config
+ * doesn't set, and `.polder.yml` entries win on conflict.
  */
 const fs = __importStar(__nccwpck_require__(896));
+const path = __importStar(__nccwpck_require__(928));
 const config_1 = __nccwpck_require__(973);
+const profiles_1 = __nccwpck_require__(717);
 const detect_1 = __nccwpck_require__(52);
+exports.PROFILE_FILENAME = '.polder.profile.yml';
 function resolveConfig(cwd, configPath) {
     let content = null;
     try {
@@ -6369,15 +7169,42 @@ function resolveConfig(cwd, configPath) {
     catch {
         /* no file — fall through to detection */
     }
+    let resolved = null;
     if (content !== null) {
         const config = (0, config_1.readConfig)(content); // throws on invalid YAML; null only for empty
-        return config ? { config, source: 'file' } : null;
+        resolved = config ? { config, source: 'file' } : null;
     }
-    const det = (0, detect_1.detectComponentLibrary)(cwd);
-    if (det.libraries.length > 0) {
-        return { config: { componentLibrary: det.libraries, allowlist: [], failOnDrift: false }, source: 'detected' };
+    else {
+        const det = (0, detect_1.detectComponentLibrary)(cwd);
+        if (det.libraries.length > 0) {
+            resolved = { config: { componentLibrary: det.libraries, allowlist: [], failOnDrift: false }, source: 'detected' };
+        }
     }
-    return null;
+    if (!resolved)
+        return null;
+    const generated = loadGeneratedProfile(cwd); // throws on invalid YAML — a corrupt file must not be silently skipped
+    if (generated) {
+        const c = resolved.config;
+        const explicit = {
+            tokens: c.tokens,
+            classPrefixes: c.classPrefixes,
+            propSignatures: c.propSignatures,
+            subComponents: c.subComponents,
+            nameSegments: c.nameSegments,
+        };
+        Object.assign(c, (0, profiles_1.mergeCustomDetection)(generated, explicit));
+    }
+    return resolved;
+}
+function loadGeneratedProfile(cwd) {
+    let raw;
+    try {
+        raw = fs.readFileSync(path.join(cwd, exports.PROFILE_FILENAME), 'utf8');
+    }
+    catch {
+        return null; // no generated profile — the common case
+    }
+    return (0, config_1.parseProfileFile)(raw);
 }
 
 
@@ -6438,12 +7265,14 @@ const suppress_1 = __nccwpck_require__(10);
 const render_1 = __nccwpck_require__(665);
 const git_1 = __nccwpck_require__(160);
 function resolveDsExports(config, workspace, warn) {
-    const nodeModules = path.join(workspace, 'node_modules');
     const dsExports = new Set();
     for (const pkg of config.componentLibrary) {
-        const ex = (0, parser_1.resolveExports)(pkg, nodeModules);
+        const libraryPath = config.libraryPaths?.[pkg];
+        const ex = (0, parser_1.resolveDsSurface)(pkg, workspace, libraryPath);
         if (ex.size === 0) {
-            warn(`Polder Drift: could not resolve exports for "${pkg}" from node_modules; run install before this step. Falling back to PascalCase heuristic.`);
+            const tried = libraryPath ? `node_modules or ${libraryPath}` : 'node_modules';
+            warn(`Polder Drift: could not resolve exports for "${pkg}" from ${tried}; run install before this step, ` +
+                `or point library_paths."${pkg}" at a checkout of the package's repo. Falling back to PascalCase heuristic.`);
         }
         for (const n of ex)
             dsExports.add(n);

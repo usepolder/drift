@@ -37,6 +37,29 @@ export function emptyProfile(): DetectionProfile {
   return { tokens: {}, classPatterns: [], propSignatures: {}, subComponentMap: {}, nameSegments: {} };
 }
 
+/**
+ * Merge two CustomDetection layers: `extra` wins per entry (records) and unions
+ * (prefix lists). Used to underlay a generated `.polder.profile.yml` beneath the
+ * hand-written `.polder.yml` keys, so manual config always has the last word.
+ */
+export function mergeCustomDetection(base: CustomDetection, extra: CustomDetection): CustomDetection {
+  const out: CustomDetection = {};
+  if (base.tokens || extra.tokens) out.tokens = { ...base.tokens, ...extra.tokens };
+  if (base.classPrefixes || extra.classPrefixes) {
+    out.classPrefixes = [...new Set([...(base.classPrefixes ?? []), ...(extra.classPrefixes ?? [])])];
+  }
+  if (base.propSignatures || extra.propSignatures) {
+    out.propSignatures = { ...base.propSignatures, ...extra.propSignatures };
+  }
+  if (base.subComponents || extra.subComponents) {
+    out.subComponents = { ...base.subComponents, ...extra.subComponents };
+  }
+  if (base.nameSegments || extra.nameSegments) {
+    out.nameSegments = { ...base.nameSegments, ...extra.nameSegments };
+  }
+  return out;
+}
+
 // ── Carbon Design System (@carbon/*) ─────────────────────────────────────────
 
 // Carbon v11 (White theme) — high-specificity hex tokens. Values common to any UI

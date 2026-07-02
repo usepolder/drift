@@ -4,11 +4,12 @@ import * as path from 'path';
 import { execFileSync } from 'child_process';
 import { type PolderConfig } from './config';
 import { resolveConfig, type ResolvedConfig } from './resolve-config';
-import { resolveExports, checkDriftFull, type FullDriftResult } from './parser';
+import { resolveDsSurface, checkDriftFull, type FullDriftResult } from './parser';
 import { flattenFindings, RULE_LABEL, type Finding } from './comment/findings';
 import { loadSuppressions, applySuppressions, type SuppressRules } from './comment/suppress';
 import { buildDetectionProfile } from './profiles';
 import { runInitSubcommand } from './commands/init';
+import { runProfileSubcommand } from './commands/profile';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -71,6 +72,7 @@ Commands:
   scan [options] [files...]   Analyse files for design system drift (default work)
   ci                          Post the drift comment from a CI PR build (Azure DevOps)
   init                        Write a starter .polder.yml (auto-detects your design system)
+  profile                     Generate .polder.profile.yml from your design system's source
   -h, --help                  Show this help
 
 Examples:
@@ -220,14 +222,16 @@ export function discoverFiles(opts: CliOptions): string[] {
 // ── Analysis ────────────────────────────────────────────────────────────────────
 
 function resolveDsExports(config: PolderConfig, cwd: string): Set<string> {
-  const nodeModulesDir = path.join(cwd, 'node_modules');
   const dsExports = new Set<string>();
   for (const pkg of config.componentLibrary) {
-    const pkgExports = resolveExports(pkg, nodeModulesDir);
+    const libraryPath = config.libraryPaths?.[pkg];
+    const pkgExports = resolveDsSurface(pkg, cwd, libraryPath);
     if (pkgExports.size === 0) {
+      const tried = libraryPath ? `node_modules or ${libraryPath}` : 'node_modules';
       process.stderr.write(
-        `polder-drift: could not resolve exports for "${pkg}" from node_modules. ` +
-          `Run your install step first. Falling back to PascalCase heuristic.\n`,
+        `polder-drift: could not resolve exports for "${pkg}" from ${tried}. ` +
+          `Run your install step first, or point library_paths."${pkg}" at the ` +
+          `package's repo/source. Falling back to PascalCase heuristic.\n`,
       );
     }
     for (const name of pkgExports) dsExports.add(name);
@@ -360,10 +364,11 @@ export function formatHuman(report: CliReport): string {
 
 // ── Subcommand dispatch ─────────────────────────────────────────────────────────
 
-// Reserved subcommand names. `ci` is built; `mcp`, `telemetry`, and `init` are reserved
-// now so the surface is stable and are built in later phases. To scan a file literally
-// named like a subcommand, use `polder-drift scan <file>` (scan takes paths explicitly).
-const RESERVED_SUBCOMMANDS = new Set(['scan', 'ci', 'mcp', 'telemetry', 'init']);
+// Reserved subcommand names. `ci`, `init`, and `profile` are built; `mcp` and
+// `telemetry` are reserved now so the surface is stable and are built in later phases.
+// To scan a file literally named like a subcommand, use `polder-drift scan <file>`
+// (scan takes paths explicitly).
+const RESERVED_SUBCOMMANDS = new Set(['scan', 'ci', 'mcp', 'telemetry', 'init', 'profile']);
 
 export function runCli(argv: string[]): number {
   const first = argv[0];
@@ -386,6 +391,10 @@ export function runCli(argv: string[]): number {
 
   if (first === 'init') {
     return runInitSubcommand(argv.slice(1));
+  }
+
+  if (first === 'profile') {
+    return runProfileSubcommand(argv.slice(1));
   }
 
   if (first === 'mcp' || first === 'telemetry') {
