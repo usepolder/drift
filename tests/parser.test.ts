@@ -554,33 +554,40 @@ describe('allowlist segment boundaries', () => {
 });
 
 describe('exports-map types resolution', () => {
-  it('types declared only under exports["."] → barrel resolved', () => {
+  function withExportsMapFixture(
+    pkgJson: object,
+    dts: string,
+    assert: (result: Set<string>) => void,
+  ): void {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'polder-test-'));
-    const pkgDir = path.join(dir, '@acme', 'ds');
-    fs.mkdirSync(path.join(pkgDir, 'dist'), { recursive: true });
-    fs.writeFileSync(
-      path.join(pkgDir, 'package.json'),
-      JSON.stringify({ exports: { '.': { types: './dist/index.d.ts', default: './dist/index.js' } } }),
-    );
-    fs.writeFileSync(
-      path.join(pkgDir, 'dist', 'index.d.ts'),
+    try {
+      const pkgDir = path.join(dir, '@acme', 'ds');
+      fs.mkdirSync(path.join(pkgDir, 'dist'), { recursive: true });
+      fs.writeFileSync(path.join(pkgDir, 'package.json'), JSON.stringify(pkgJson));
+      fs.writeFileSync(path.join(pkgDir, 'dist', 'index.d.ts'), dts);
+      assert(resolveExports('@acme/ds', dir));
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('types declared only under exports["."] → barrel resolved', () => {
+    withExportsMapFixture(
+      { exports: { '.': { types: './dist/index.d.ts', default: './dist/index.js' } } },
       `export declare const Button: any;\nexport declare function useToggle(): any;\n`,
+      (result) => {
+        expect(result.has('Button')).toBe(true);
+        expect(result.has('useToggle')).toBe(true);
+      },
     );
-    const result = resolveExports('@acme/ds', dir);
-    expect(result.has('Button')).toBe(true);
-    expect(result.has('useToggle')).toBe(true);
   });
 
   it('types nested under exports["."].import condition → resolved', () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'polder-test-'));
-    const pkgDir = path.join(dir, '@acme', 'ds');
-    fs.mkdirSync(path.join(pkgDir, 'dist'), { recursive: true });
-    fs.writeFileSync(
-      path.join(pkgDir, 'package.json'),
-      JSON.stringify({ exports: { '.': { import: { types: './dist/index.d.ts' } } } }),
+    withExportsMapFixture(
+      { exports: { '.': { import: { types: './dist/index.d.ts' } } } },
+      `export declare const Modal: any;\n`,
+      (result) => expect(result.has('Modal')).toBe(true),
     );
-    fs.writeFileSync(path.join(pkgDir, 'dist', 'index.d.ts'), `export declare const Modal: any;\n`);
-    expect(resolveExports('@acme/ds', dir).has('Modal')).toBe(true);
   });
 });
 

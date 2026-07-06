@@ -5200,7 +5200,7 @@ function analyzePr(p) {
         // analyzeFile parses once per file for both drift and the canonical-usage count.
         const res = (0, parser_1.analyzeFile)(content, p.dsExports, p.canonicalPkgs, p.allowlist, file, p.profile);
         if (res.parseFailed)
-            p.onUnparseable?.(file);
+            p.onUnparseable?.(file, 'head');
         findings.push(...(0, findings_1.flattenFindings)(file, res.drift));
         canonicalUsages += res.canonicalUsages;
     }
@@ -5229,6 +5229,8 @@ function analyzePr(p) {
             if (base == null)
                 continue;
             const res = (0, parser_1.analyzeFile)(base, p.dsExports, p.canonicalPkgs, p.allowlist, file, p.profile);
+            if (res.parseFailed)
+                p.onUnparseable?.(file, 'base');
             // Suppress base findings the same way head findings are (analyze above), so the
             // adoption delta compares like with like and .polderignore doesn't fake a gain.
             const ff = (0, suppress_1.applySuppressions)((0, findings_1.flattenFindings)(file, res.drift), p.suppress);
@@ -7682,7 +7684,9 @@ async function runCi(platform, opts = {}) {
         // tokens/signatures straight into the profile.
         profile: (0, profiles_1.buildDetectionProfile)(config.componentLibrary, config),
         suppress,
-        onUnparseable: (file) => warn(`Polder Drift: could not parse ${file} — drift not analyzed for this file.`),
+        onUnparseable: (file, version) => warn(version === 'base'
+            ? `Polder Drift: could not parse the base version of ${file} — its drift may be reported as new.`
+            : `Polder Drift: could not parse ${file} — drift not analyzed for this file.`),
     });
     // Post a new comment only when there is reportable drift; otherwise update an
     // existing comment (to clear a prior alert) but do not create noise on a clean PR.
