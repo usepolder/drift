@@ -97,3 +97,21 @@ describe('analyzePr', () => {
     expect(r.body).not.toContain('introduced by this PR');
   });
 });
+
+// "We couldn't look" must never read as "no drift" — unparseable files surface.
+describe('onUnparseable', () => {
+  it('fires for an unparseable head file instead of silently reporting zero drift', () => {
+    const seen: string[] = [];
+    const r = analyzePr(
+      base({ readCurrent: () => '@@@ this is not source ###', onUnparseable: (f) => seen.push(f) }),
+    );
+    expect(seen).toEqual(['src/X.tsx']);
+    expect(r.totalFindings).toBe(0);
+  });
+
+  it('does not fire for parseable files', () => {
+    const seen: string[] = [];
+    analyzePr(base({ onUnparseable: (f) => seen.push(f) }));
+    expect(seen).toEqual([]);
+  });
+});

@@ -103,6 +103,8 @@ export async function runCi(
     // tokens/signatures straight into the profile.
     profile: buildDetectionProfile(config.componentLibrary, config),
     suppress,
+    onUnparseable: (file) =>
+      warn(`Polder Drift: could not parse ${file} — drift not analyzed for this file.`),
   });
 
   // Post a new comment only when there is reportable drift; otherwise update an

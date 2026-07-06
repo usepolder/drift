@@ -78,25 +78,40 @@ export class GitHubPlatform implements PrPlatform {
   async upsertComment(body: string, marker: string, createIfMissing: boolean): Promise<boolean> {
     // Octokit throws on a non-2xx response, so read/write failures propagate to the
     // caller (run-ci) rather than being mistaken for a successful or skipped post.
-    const existingId = await this.findExistingComment(marker);
-    if (existingId !== null) {
-      await this.octokit.rest.issues.updateComment({
-        owner: this.owner,
-        repo: this.repo,
-        comment_id: existingId,
-        body,
-      });
-      return true;
-    } else if (createIfMissing) {
-      await this.octokit.rest.issues.createComment({
-        owner: this.owner,
-        repo: this.repo,
-        issue_number: this.prNumber,
-        body,
-      });
-      return true;
+    try {
+      const existingId = await this.findExistingComment(marker);
+      if (existingId !== null) {
+        await this.octokit.rest.issues.updateComment({
+          owner: this.owner,
+          repo: this.repo,
+          comment_id: existingId,
+          body,
+        });
+        return true;
+      } else if (createIfMissing) {
+        await this.octokit.rest.issues.createComment({
+          owner: this.owner,
+          repo: this.repo,
+          issue_number: this.prNumber,
+          body,
+        });
+        return true;
+      }
+      return false;
+    } catch (err) {
+      // Fork PRs always get a read-only token (403). The comment can't be posted,
+      // but the report needn't be lost: write it to the workflow step summary,
+      // then rethrow so run-ci still surfaces the failure loudly.
+      if ((err as { status?: number }).status === 403) {
+        try {
+          await core.summary.addRaw(body, true).write();
+          (err as Error).message += ' [drift report written to the workflow step summary]';
+        } catch {
+          // summary write is best-effort; the original error still propagates
+        }
+      }
+      throw err;
     }
-    return false;
   }
 
   fail(message: string): void {

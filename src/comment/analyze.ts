@@ -38,6 +38,11 @@ export interface AnalyzeParams {
   suppress: SuppressRules;
   minSeverityToComment?: 'high' | 'medium';
   marker?: string;
+  /**
+   * Called when a changed file can't be parsed — its drift is NOT analyzed, and
+   * silence here would let "we couldn't look" read as "no drift".
+   */
+  onUnparseable?: (file: string) => void;
 }
 
 export interface AnalyzeResult extends RenderResult {
@@ -56,6 +61,7 @@ export function analyzePr(p: AnalyzeParams): AnalyzeResult {
     if (content == null) continue;
     // analyzeFile parses once per file for both drift and the canonical-usage count.
     const res = analyzeFile(content, p.dsExports, p.canonicalPkgs, p.allowlist, file, p.profile);
+    if (res.parseFailed) p.onUnparseable?.(file);
     findings.push(...flattenFindings(file, res.drift));
     canonicalUsages += res.canonicalUsages;
   }
