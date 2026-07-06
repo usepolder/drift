@@ -113,14 +113,25 @@ export function renderComment(findings: Finding[], opts: RenderOptions = {}): Re
   return { body: lines.join('\n'), shouldComment, newFindings, existingFindings };
 }
 
+// Table cells carry attacker-controlled strings on fork PRs (import sources and
+// filenames flow into title/detail/file). A backtick breaks the inline code span,
+// a pipe forges extra columns, and a newline escapes the table entirely — any of
+// which lets a PR author inject markdown that renders as authored by the bot.
+// Flatten and cap before interpolation.
+function sanitizeCell(value: string): string {
+  const cleaned = value.replace(/`/g, '').replace(/\|/g, '\\|').replace(/[\r\n]+/g, ' ');
+  return cleaned.length > 200 ? `${cleaned.slice(0, 200)}…` : cleaned;
+}
+
 function renderTable(findings: Finding[]): string[] {
   const sorted = [...findings].sort(
     (a, b) => RULE_ORDER.indexOf(a.rule) - RULE_ORDER.indexOf(b.rule) || a.file.localeCompare(b.file),
   );
   const rows = sorted.map((f) => {
-    const location = f.line !== undefined ? `${f.file}:${f.line}` : f.file;
+    const file = sanitizeCell(f.file);
+    const location = f.line !== undefined ? `${file}:${f.line}` : file;
     const where = f.commit ? `${location} \`@${f.commit.slice(0, 7)}\`` : location;
-    return `| ${RULE_LABEL[f.rule]} | \`${f.title}\` | ${f.detail} | ${where} | \`${f.id}\` |`;
+    return `| ${RULE_LABEL[f.rule]} | \`${sanitizeCell(f.title)}\` | ${sanitizeCell(f.detail)} | ${where} | \`${f.id}\` |`;
   });
   return [
     '| Type | What | Detail | Where | ID |',
