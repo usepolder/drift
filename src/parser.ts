@@ -68,6 +68,25 @@ export function resolveExports(pkgName: string, nodeModulesDir: string): Set<str
   return resolveDtsExports(path.join(nodeModulesDir, pkgName));
 }
 
+// Types entry from the package.json "exports" map: the root entry's "types"
+// condition, checked directly and under the common nested conditions.
+function typesFromExportsMap(exportsField: unknown): string | null {
+  if (!exportsField || typeof exportsField !== 'object') return null;
+  const map = exportsField as Record<string, unknown>;
+  const root = '.' in map ? map['.'] : map;
+  if (!root || typeof root !== 'object') return null;
+  const rootObj = root as Record<string, unknown>;
+  if (typeof rootObj.types === 'string') return rootObj.types;
+  for (const condition of ['import', 'require', 'default']) {
+    const nested = rootObj[condition];
+    if (nested && typeof nested === 'object') {
+      const t = (nested as Record<string, unknown>).types;
+      if (typeof t === 'string') return t;
+    }
+  }
+  return null;
+}
+
 /** Exports read from a package directory's .d.ts files (types entry or per-file). */
 export function resolveDtsExports(pkgDir: string): Set<string> {
   const names = new Set<string>();
@@ -77,11 +96,18 @@ export function resolveDtsExports(pkgDir: string): Set<string> {
       types?: string;
       typings?: string;
       main?: string;
+      exports?: unknown;
     };
+
+    // Modern packages declare their types entry under the "exports" map
+    // ("exports": { ".": { "types": "./dist/index.d.ts" } }) with no top-level
+    // "types" field — without this check they'd fall into the filename-scan
+    // heuristic and miss barrel semantics.
+    const mapTypes = typesFromExportsMap(pkgJson.exports);
 
     // When the package has no types entry but ships one .d.ts per export (e.g.
     // @carbon/icons-react), collect names from .d.ts filenames in the lib/ dir.
-    if (!pkgJson.types && !pkgJson.typings) {
+    if (!pkgJson.types && !pkgJson.typings && !mapTypes) {
       const candidates = ['lib', 'es', 'dist', '.'];
       for (const dir of candidates) {
         const dirPath = path.join(pkgDir, dir);
@@ -97,7 +123,7 @@ export function resolveDtsExports(pkgDir: string): Set<string> {
       return names;
     }
 
-    const typesEntry = pkgJson.types ?? pkgJson.typings ?? 'index.d.ts';
+    const typesEntry = mapTypes ?? pkgJson.types ?? pkgJson.typings ?? 'index.d.ts';
     const rootDtsPath = path.join(pkgDir, typesEntry);
 
     // BFS over export * chains — queue holds absolute paths already resolved to .d.ts
@@ -299,6 +325,16 @@ export function checkDrift(
   return checkDriftAst(ast, dsExports, canonicalPkgs, allowlist);
 }
 
+// Allowlist entries match whole path segments: "#ds" allows "#ds" and "#ds/Button"
+// but not "#dsx/Button" or "#design-tokens/Button". A trailing "/" keeps plain
+// prefix semantics for entries that already pin the boundary.
+function isAllowlisted(source: string, allowlist: string[]): boolean {
+  return allowlist.some((allowed) => {
+    if (allowed.endsWith('/')) return source.startsWith(allowed);
+    return source === allowed || source.startsWith(`${allowed}/`);
+  });
+}
+
 function checkDriftAst(
   ast: Ast,
   dsExports: Set<string>,
@@ -317,7 +353,7 @@ function checkDriftAst(
     if (canonicalPkgs.some((pkg) => source === pkg)) continue;
 
     // Not drift: allowlisted path
-    if (allowlist.some((allowed) => source.startsWith(allowed))) continue;
+    if (isAllowlisted(source, allowlist)) continue;
 
     // Not drift: third-party package (not relative, not a path alias starting with #)
     // Only check relative paths (./ ../) and internal path aliases (#...)
@@ -765,6 +801,11 @@ export interface FileAnalysis {
   drift: FullDriftResult;
   /** Canonical DS usages in the file (see countCanonicalUsages). */
   canonicalUsages: number;
+  /**
+   * True when the file couldn't be parsed even with errorRecovery — zero findings
+   * then means "couldn't look", not "no drift", and callers should say so.
+   */
+  parseFailed?: boolean;
 }
 
 /**
@@ -784,7 +825,7 @@ export function analyzeFile(
   // (a util importing from the DS package is adoption too), matching
   // countCanonicalUsages. The drift checks below keep their own prefilter.
   const ast = parseSource(fileContent);
-  if (!ast) return { drift: EMPTY_DRIFT_FULL(), canonicalUsages: 0 };
+  if (!ast) return { drift: EMPTY_DRIFT_FULL(), canonicalUsages: 0, parseFailed: true };
 
   const canonicalUsages = countCanonicalUsagesAst(ast, dsExports, canonicalPkgs);
   const isTsx = filename?.endsWith('.tsx') ?? false;

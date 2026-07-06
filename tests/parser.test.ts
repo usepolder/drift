@@ -528,3 +528,71 @@ describe('CARBON_TOKENS', () => {
     expect(CARBON_TOKENS['#e0e0e0']).toBeUndefined(); // common gray, excluded
   });
 });
+
+// ── ports from the action-prototype eng review (2026-07-06) ──────────────────
+
+describe('allowlist segment boundaries', () => {
+  const jsxHeader = 'export function MyComp() { return <div />; }\n';
+
+  it('"#ds" allows "#ds/Button" (segment boundary)', () => {
+    const content = jsxHeader + `import { Button } from '#ds/Button';`;
+    const { driftCount } = checkDrift(content, DS_EXPORTS, CANONICAL, ['#ds']);
+    expect(driftCount).toBe(0);
+  });
+
+  it('"#ds" does NOT allow the lookalike "#dsx/Button"', () => {
+    const content = jsxHeader + `import { Button } from '#dsx/Button';`;
+    const { driftCount } = checkDrift(content, DS_EXPORTS, CANONICAL, ['#ds']);
+    expect(driftCount).toBe(1);
+  });
+
+  it('trailing-slash entries keep plain prefix semantics', () => {
+    const content = jsxHeader + `import { Button } from '#ds-wrappers/nested/Button';`;
+    const { driftCount } = checkDrift(content, DS_EXPORTS, CANONICAL, ['#ds-wrappers/']);
+    expect(driftCount).toBe(0);
+  });
+});
+
+describe('exports-map types resolution', () => {
+  it('types declared only under exports["."] → barrel resolved', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'polder-test-'));
+    const pkgDir = path.join(dir, '@acme', 'ds');
+    fs.mkdirSync(path.join(pkgDir, 'dist'), { recursive: true });
+    fs.writeFileSync(
+      path.join(pkgDir, 'package.json'),
+      JSON.stringify({ exports: { '.': { types: './dist/index.d.ts', default: './dist/index.js' } } }),
+    );
+    fs.writeFileSync(
+      path.join(pkgDir, 'dist', 'index.d.ts'),
+      `export declare const Button: any;\nexport declare function useToggle(): any;\n`,
+    );
+    const result = resolveExports('@acme/ds', dir);
+    expect(result.has('Button')).toBe(true);
+    expect(result.has('useToggle')).toBe(true);
+  });
+
+  it('types nested under exports["."].import condition → resolved', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'polder-test-'));
+    const pkgDir = path.join(dir, '@acme', 'ds');
+    fs.mkdirSync(path.join(pkgDir, 'dist'), { recursive: true });
+    fs.writeFileSync(
+      path.join(pkgDir, 'package.json'),
+      JSON.stringify({ exports: { '.': { import: { types: './dist/index.d.ts' } } } }),
+    );
+    fs.writeFileSync(path.join(pkgDir, 'dist', 'index.d.ts'), `export declare const Modal: any;\n`);
+    expect(resolveExports('@acme/ds', dir).has('Modal')).toBe(true);
+  });
+});
+
+describe('analyzeFile parse failure', () => {
+  it('unparseable content → parseFailed true, zero findings', () => {
+    const res = analyzeFile('@@@ not source ###', DS_EXPORTS, CANONICAL, []);
+    expect(res.parseFailed).toBe(true);
+    expect(res.drift.totalCount).toBe(0);
+  });
+
+  it('parseable content → parseFailed not set', () => {
+    const res = analyzeFile('export const x = 1;\n', DS_EXPORTS, CANONICAL, []);
+    expect(res.parseFailed).toBeUndefined();
+  });
+});
