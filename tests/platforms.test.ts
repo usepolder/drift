@@ -413,3 +413,54 @@ describe('runCi post-state tracking', () => {
     );
   });
 });
+
+// Fork PRs always get a read-only token: the comment 403s. The report must not be
+// lost — it goes to the workflow step summary, and the error still propagates so
+// run-ci surfaces the failure loudly (#6 semantics preserved).
+describe('GitHubPlatform 403 degrade to step summary', () => {
+  const ORIG_REPO = process.env.GITHUB_REPOSITORY;
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    github.context.payload = {};
+    if (ORIG_REPO === undefined) delete process.env.GITHUB_REPOSITORY;
+    else process.env.GITHUB_REPOSITORY = ORIG_REPO;
+  });
+
+  function platformWithCreateError(err: Error) {
+    const listComments = vi.fn(async () => ({ data: [] }));
+    const createComment = vi.fn(async () => {
+      throw err;
+    });
+    const octokit = { rest: { issues: { listComments, updateComment: vi.fn(), createComment } } };
+    vi.spyOn(github, 'getOctokit').mockReturnValue(
+      octokit as unknown as ReturnType<typeof github.getOctokit>,
+    );
+    vi.spyOn(core, 'getInput').mockReturnValue('test-token');
+    process.env.GITHUB_REPOSITORY = 'acme/web';
+    github.context.payload = { pull_request: { number: 7, base: { sha: 'base-sha' } } };
+    return GitHubPlatform.fromEnv()!;
+  }
+
+  it('403 → report written to step summary, error rethrown with pointer', async () => {
+    const platform = platformWithCreateError(
+      Object.assign(new Error('Resource not accessible by integration'), { status: 403 }),
+    );
+    const addRaw = vi.spyOn(core.summary, 'addRaw').mockReturnValue(core.summary);
+    const write = vi.spyOn(core.summary, 'write').mockResolvedValue(core.summary);
+
+    await expect(platform.upsertComment('drift body', '<!--polder-drift-->', true)).rejects.toThrow(
+      /step summary/,
+    );
+    expect(addRaw).toHaveBeenCalledWith('drift body', true);
+    expect(write).toHaveBeenCalled();
+  });
+
+  it('non-403 errors rethrow untouched, no summary write', async () => {
+    const platform = platformWithCreateError(Object.assign(new Error('boom'), { status: 500 }));
+    const addRaw = vi.spyOn(core.summary, 'addRaw').mockReturnValue(core.summary);
+
+    await expect(platform.upsertComment('body', '<!--polder-drift-->', true)).rejects.toThrow('boom');
+    expect(addRaw).not.toHaveBeenCalled();
+  });
+});

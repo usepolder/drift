@@ -38,6 +38,14 @@ export interface AnalyzeParams {
   suppress: SuppressRules;
   minSeverityToComment?: 'high' | 'medium';
   marker?: string;
+  /**
+   * Called when a file version can't be parsed — silence here would let "we
+   * couldn't look" read as "no drift". A 'head' failure means the file's drift
+   * was not analyzed at all; a 'base' failure means its pre-existing drift is
+   * unknown, so head findings in that file may be misreported as new and the
+   * adoption delta is skewed.
+   */
+  onUnparseable?: (file: string, version: 'head' | 'base') => void;
 }
 
 export interface AnalyzeResult extends RenderResult {
@@ -56,6 +64,7 @@ export function analyzePr(p: AnalyzeParams): AnalyzeResult {
     if (content == null) continue;
     // analyzeFile parses once per file for both drift and the canonical-usage count.
     const res = analyzeFile(content, p.dsExports, p.canonicalPkgs, p.allowlist, file, p.profile);
+    if (res.parseFailed) p.onUnparseable?.(file, 'head');
     findings.push(...flattenFindings(file, res.drift));
     canonicalUsages += res.canonicalUsages;
   }
@@ -84,6 +93,7 @@ export function analyzePr(p: AnalyzeParams): AnalyzeResult {
       const base = p.readBase(file);
       if (base == null) continue;
       const res = analyzeFile(base, p.dsExports, p.canonicalPkgs, p.allowlist, file, p.profile);
+      if (res.parseFailed) p.onUnparseable?.(file, 'base');
       // Suppress base findings the same way head findings are (analyze above), so the
       // adoption delta compares like with like and .polderignore doesn't fake a gain.
       const ff = applySuppressions(flattenFindings(file, res.drift), p.suppress);

@@ -218,3 +218,44 @@ describe('renderComment', () => {
     expect(r.body).toContain('@abcdef1');
   });
 });
+
+// Ported from the action-prototype eng review (2026-07-06): table cells carry
+// attacker-controlled strings on fork PRs (import sources, filenames). Without
+// sanitization, a backtick breaks the code span, a pipe forges columns, and a
+// newline escapes the table — markdown injection rendered as authored by the bot.
+describe('renderComment cell sanitization', () => {
+  const mkFinding = (over: Partial<Finding>): Finding =>
+    ({
+      id: 'abc123def456',
+      rule: 'import-drift',
+      severity: 'high',
+      title: 'Button',
+      detail: 'imported from a local path',
+      file: 'src/App.tsx',
+      ...over,
+    }) as Finding;
+
+  it('backticks, pipes, and newlines in title/detail/file cannot escape the table', () => {
+    const evil = mkFinding({
+      title: 'Button` | INJECTED | `x',
+      file: 'src/a`|`.tsx',
+      detail: 'line1\nline2 | col',
+    });
+    const r = renderComment([evil], {});
+    const rows = r.body
+      .split('\n')
+      .filter((l) => l.startsWith('|') && !l.startsWith('|--') && !l.startsWith('| Type'));
+    // still exactly one finding row — the newline did not split it
+    expect(rows).toHaveLength(1);
+    // backticks stripped from cells: only our own code spans remain (title + id)
+    expect((rows[0].match(/`/g) ?? []).length).toBe(4);
+    // pipes inside cells are escaped, not column separators
+    expect(rows[0]).toContain('\\|');
+  });
+
+  it('overlong cell content is capped', () => {
+    const r = renderComment([mkFinding({ title: 'X'.repeat(300) })], {});
+    expect(r.body).toContain('…');
+    expect(r.body).not.toContain('X'.repeat(250));
+  });
+});

@@ -97,3 +97,37 @@ describe('analyzePr', () => {
     expect(r.body).not.toContain('introduced by this PR');
   });
 });
+
+// "We couldn't look" must never read as "no drift" — unparseable files surface.
+describe('onUnparseable', () => {
+  it('fires for an unparseable head file instead of silently reporting zero drift', () => {
+    const seen: [string, string][] = [];
+    const r = analyzePr(
+      base({
+        readCurrent: () => '@@@ this is not source ###',
+        onUnparseable: (f, v) => seen.push([f, v]),
+      }),
+    );
+    expect(seen).toEqual([['src/X.tsx', 'head']]);
+    expect(r.totalFindings).toBe(0);
+  });
+
+  it('fires for an unparseable BASE file — pre-existing drift is unknown there', () => {
+    const seen: [string, string][] = [];
+    const r = analyzePr(
+      base({
+        readBase: () => '@@@ this is not source ###',
+        onUnparseable: (f, v) => seen.push([f, v]),
+      }),
+    );
+    expect(seen).toEqual([['src/X.tsx', 'base']]);
+    // With the base unreadable, the head finding is (necessarily) classified new
+    expect(r.newFindings).toHaveLength(1);
+  });
+
+  it('does not fire for parseable files', () => {
+    const seen: [string, string][] = [];
+    analyzePr(base({ readBase: () => BASE_CLEAN, onUnparseable: (f, v) => seen.push([f, v]) }));
+    expect(seen).toEqual([]);
+  });
+});

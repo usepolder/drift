@@ -528,3 +528,78 @@ describe('CARBON_TOKENS', () => {
     expect(CARBON_TOKENS['#e0e0e0']).toBeUndefined(); // common gray, excluded
   });
 });
+
+// ── ports from the action-prototype eng review (2026-07-06) ──────────────────
+
+describe('allowlist segment boundaries', () => {
+  const jsxHeader = 'export function MyComp() { return <div />; }\n';
+
+  it('"#ds" allows "#ds/Button" (segment boundary)', () => {
+    const content = jsxHeader + `import { Button } from '#ds/Button';`;
+    const { driftCount } = checkDrift(content, DS_EXPORTS, CANONICAL, ['#ds']);
+    expect(driftCount).toBe(0);
+  });
+
+  it('"#ds" does NOT allow the lookalike "#dsx/Button"', () => {
+    const content = jsxHeader + `import { Button } from '#dsx/Button';`;
+    const { driftCount } = checkDrift(content, DS_EXPORTS, CANONICAL, ['#ds']);
+    expect(driftCount).toBe(1);
+  });
+
+  it('trailing-slash entries keep plain prefix semantics', () => {
+    const content = jsxHeader + `import { Button } from '#ds-wrappers/nested/Button';`;
+    const { driftCount } = checkDrift(content, DS_EXPORTS, CANONICAL, ['#ds-wrappers/']);
+    expect(driftCount).toBe(0);
+  });
+});
+
+describe('exports-map types resolution', () => {
+  function withExportsMapFixture(
+    pkgJson: object,
+    dts: string,
+    assert: (result: Set<string>) => void,
+  ): void {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'polder-test-'));
+    try {
+      const pkgDir = path.join(dir, '@acme', 'ds');
+      fs.mkdirSync(path.join(pkgDir, 'dist'), { recursive: true });
+      fs.writeFileSync(path.join(pkgDir, 'package.json'), JSON.stringify(pkgJson));
+      fs.writeFileSync(path.join(pkgDir, 'dist', 'index.d.ts'), dts);
+      assert(resolveExports('@acme/ds', dir));
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it('types declared only under exports["."] → barrel resolved', () => {
+    withExportsMapFixture(
+      { exports: { '.': { types: './dist/index.d.ts', default: './dist/index.js' } } },
+      `export declare const Button: any;\nexport declare function useToggle(): any;\n`,
+      (result) => {
+        expect(result.has('Button')).toBe(true);
+        expect(result.has('useToggle')).toBe(true);
+      },
+    );
+  });
+
+  it('types nested under exports["."].import condition → resolved', () => {
+    withExportsMapFixture(
+      { exports: { '.': { import: { types: './dist/index.d.ts' } } } },
+      `export declare const Modal: any;\n`,
+      (result) => expect(result.has('Modal')).toBe(true),
+    );
+  });
+});
+
+describe('analyzeFile parse failure', () => {
+  it('unparseable content → parseFailed true, zero findings', () => {
+    const res = analyzeFile('@@@ not source ###', DS_EXPORTS, CANONICAL, []);
+    expect(res.parseFailed).toBe(true);
+    expect(res.drift.totalCount).toBe(0);
+  });
+
+  it('parseable content → parseFailed not set', () => {
+    const res = analyzeFile('export const x = 1;\n', DS_EXPORTS, CANONICAL, []);
+    expect(res.parseFailed).toBeUndefined();
+  });
+});
