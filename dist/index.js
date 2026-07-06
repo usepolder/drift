@@ -34098,6 +34098,8 @@ function analyzePr(p) {
             continue;
         // analyzeFile parses once per file for both drift and the canonical-usage count.
         const res = (0, parser_1.analyzeFile)(content, p.dsExports, p.canonicalPkgs, p.allowlist, file, p.profile);
+        if (res.parseFailed)
+            p.onUnparseable?.(file);
         findings.push(...(0, findings_1.flattenFindings)(file, res.drift));
         canonicalUsages += res.canonicalUsages;
     }
@@ -34318,12 +34320,22 @@ function renderComment(findings, opts = {}) {
     lines.push('', footer());
     return { body: lines.join('\n'), shouldComment, newFindings, existingFindings };
 }
+// Table cells carry attacker-controlled strings on fork PRs (import sources and
+// filenames flow into title/detail/file). A backtick breaks the inline code span,
+// a pipe forges extra columns, and a newline escapes the table entirely — any of
+// which lets a PR author inject markdown that renders as authored by the bot.
+// Flatten and cap before interpolation.
+function sanitizeCell(value) {
+    const cleaned = value.replace(/`/g, '').replace(/\|/g, '\\|').replace(/[\r\n]+/g, ' ');
+    return cleaned.length > 200 ? `${cleaned.slice(0, 200)}…` : cleaned;
+}
 function renderTable(findings) {
     const sorted = [...findings].sort((a, b) => RULE_ORDER.indexOf(a.rule) - RULE_ORDER.indexOf(b.rule) || a.file.localeCompare(b.file));
     const rows = sorted.map((f) => {
-        const location = f.line !== undefined ? `${f.file}:${f.line}` : f.file;
+        const file = sanitizeCell(f.file);
+        const location = f.line !== undefined ? `${file}:${f.line}` : file;
         const where = f.commit ? `${location} \`@${f.commit.slice(0, 7)}\`` : location;
-        return `| ${findings_1.RULE_LABEL[f.rule]} | \`${f.title}\` | ${f.detail} | ${where} | \`${f.id}\` |`;
+        return `| ${findings_1.RULE_LABEL[f.rule]} | \`${sanitizeCell(f.title)}\` | ${sanitizeCell(f.detail)} | ${where} | \`${f.id}\` |`;
     });
     return [
         '| Type | What | Detail | Where | ID |',
@@ -34914,15 +34926,42 @@ function resolveFile(filePath) {
 function resolveExports(pkgName, nodeModulesDir) {
     return resolveDtsExports(path.join(nodeModulesDir, pkgName));
 }
+// Types entry from the package.json "exports" map: the root entry's "types"
+// condition, checked directly and under the common nested conditions.
+function typesFromExportsMap(exportsField) {
+    if (!exportsField || typeof exportsField !== 'object')
+        return null;
+    const map = exportsField;
+    const root = '.' in map ? map['.'] : map;
+    if (!root || typeof root !== 'object')
+        return null;
+    const rootObj = root;
+    if (typeof rootObj.types === 'string')
+        return rootObj.types;
+    for (const condition of ['import', 'require', 'default']) {
+        const nested = rootObj[condition];
+        if (nested && typeof nested === 'object') {
+            const t = nested.types;
+            if (typeof t === 'string')
+                return t;
+        }
+    }
+    return null;
+}
 /** Exports read from a package directory's .d.ts files (types entry or per-file). */
 function resolveDtsExports(pkgDir) {
     const names = new Set();
     try {
         const pkgJsonPath = path.join(pkgDir, 'package.json');
         const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'));
+        // Modern packages declare their types entry under the "exports" map
+        // ("exports": { ".": { "types": "./dist/index.d.ts" } }) with no top-level
+        // "types" field — without this check they'd fall into the filename-scan
+        // heuristic and miss barrel semantics.
+        const mapTypes = typesFromExportsMap(pkgJson.exports);
         // When the package has no types entry but ships one .d.ts per export (e.g.
         // @carbon/icons-react), collect names from .d.ts filenames in the lib/ dir.
-        if (!pkgJson.types && !pkgJson.typings) {
+        if (!pkgJson.types && !pkgJson.typings && !mapTypes) {
             const candidates = ['lib', 'es', 'dist', '.'];
             for (const dir of candidates) {
                 const dirPath = path.join(pkgDir, dir);
@@ -34939,7 +34978,7 @@ function resolveDtsExports(pkgDir) {
             }
             return names;
         }
-        const typesEntry = pkgJson.types ?? pkgJson.typings ?? 'index.d.ts';
+        const typesEntry = mapTypes ?? pkgJson.types ?? pkgJson.typings ?? 'index.d.ts';
         const rootDtsPath = path.join(pkgDir, typesEntry);
         // BFS over export * chains — queue holds absolute paths already resolved to .d.ts
         const visited = new Set();
@@ -35129,6 +35168,16 @@ function checkDrift(fileContent, dsExports, canonicalPkgs, allowlist, filename) 
         return { driftCount: 0, driftedSymbols: [], lines: {} };
     return checkDriftAst(ast, dsExports, canonicalPkgs, allowlist);
 }
+// Allowlist entries match whole path segments: "#ds" allows "#ds" and "#ds/Button"
+// but not "#dsx/Button" or "#design-tokens/Button". A trailing "/" keeps plain
+// prefix semantics for entries that already pin the boundary.
+function isAllowlisted(source, allowlist) {
+    return allowlist.some((allowed) => {
+        if (allowed.endsWith('/'))
+            return source.startsWith(allowed);
+        return source === allowed || source.startsWith(`${allowed}/`);
+    });
+}
 function checkDriftAst(ast, dsExports, canonicalPkgs, allowlist) {
     const driftedSymbols = [];
     const lines = {};
@@ -35141,7 +35190,7 @@ function checkDriftAst(ast, dsExports, canonicalPkgs, allowlist) {
         if (canonicalPkgs.some((pkg) => source === pkg))
             continue;
         // Not drift: allowlisted path
-        if (allowlist.some((allowed) => source.startsWith(allowed)))
+        if (isAllowlisted(source, allowlist))
             continue;
         // Not drift: third-party package (not relative, not a path alias starting with #)
         // Only check relative paths (./ ../) and internal path aliases (#...)
@@ -35488,7 +35537,7 @@ function analyzeFile(fileContent, dsExports, canonicalPkgs, allowlist, filename,
     // countCanonicalUsages. The drift checks below keep their own prefilter.
     const ast = parseSource(fileContent);
     if (!ast)
-        return { drift: EMPTY_DRIFT_FULL(), canonicalUsages: 0 };
+        return { drift: EMPTY_DRIFT_FULL(), canonicalUsages: 0, parseFailed: true };
     const canonicalUsages = countCanonicalUsagesAst(ast, dsExports, canonicalPkgs);
     const isTsx = filename?.endsWith('.tsx') ?? false;
     if (!isTsx && !isComponentFile(fileContent)) {
@@ -35672,26 +35721,43 @@ class GitHubPlatform {
     async upsertComment(body, marker, createIfMissing) {
         // Octokit throws on a non-2xx response, so read/write failures propagate to the
         // caller (run-ci) rather than being mistaken for a successful or skipped post.
-        const existingId = await this.findExistingComment(marker);
-        if (existingId !== null) {
-            await this.octokit.rest.issues.updateComment({
-                owner: this.owner,
-                repo: this.repo,
-                comment_id: existingId,
-                body,
-            });
-            return true;
+        try {
+            const existingId = await this.findExistingComment(marker);
+            if (existingId !== null) {
+                await this.octokit.rest.issues.updateComment({
+                    owner: this.owner,
+                    repo: this.repo,
+                    comment_id: existingId,
+                    body,
+                });
+                return true;
+            }
+            else if (createIfMissing) {
+                await this.octokit.rest.issues.createComment({
+                    owner: this.owner,
+                    repo: this.repo,
+                    issue_number: this.prNumber,
+                    body,
+                });
+                return true;
+            }
+            return false;
         }
-        else if (createIfMissing) {
-            await this.octokit.rest.issues.createComment({
-                owner: this.owner,
-                repo: this.repo,
-                issue_number: this.prNumber,
-                body,
-            });
-            return true;
+        catch (err) {
+            // Fork PRs always get a read-only token (403). The comment can't be posted,
+            // but the report needn't be lost: write it to the workflow step summary,
+            // then rethrow so run-ci still surfaces the failure loudly.
+            if (err.status === 403) {
+                try {
+                    await core.summary.addRaw(body, true).write();
+                    err.message += ' [drift report written to the workflow step summary]';
+                }
+                catch {
+                    // summary write is best-effort; the original error still propagates
+                }
+            }
+            throw err;
         }
-        return false;
     }
     fail(message) {
         core.setFailed(message);
@@ -36242,6 +36308,7 @@ async function runCi(platform, opts = {}) {
         // tokens/signatures straight into the profile.
         profile: (0, profiles_1.buildDetectionProfile)(config.componentLibrary, config),
         suppress,
+        onUnparseable: (file) => warn(`Polder Drift: could not parse ${file} — drift not analyzed for this file.`),
     });
     // Post a new comment only when there is reportable drift; otherwise update an
     // existing comment (to clear a prior alert) but do not create noise on a clean PR.
