@@ -43,7 +43,8 @@
     "build:all": "npm run build && npm run build:cli",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint ."
   },
   "dependencies": {
     "@actions/core": "^1.10.1",
@@ -54,12 +55,15 @@
   "devDependencies": {
     "@carbon/icons-react": "^11.82.0",
     "@carbon/react": "^1.110.0",
+    "@eslint/js": "^9.39.5",
     "@mui/icons-material": "^9.1.1",
     "@mui/material": "^9.1.1",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.0.0",
     "@vercel/ncc": "^0.38.1",
+    "eslint": "^9.39.5",
     "typescript": "^5.4.0",
+    "typescript-eslint": "^8.72.0",
     "vitest": "^1.6.0"
   }
 }
