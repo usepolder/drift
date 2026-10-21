@@ -266,19 +266,15 @@ export function generateDetectionData(pkgDir: string, dsExports: Set<string>): G
     for (const [k, v] of facts.typeMembers) if (!typeMembers.has(k)) typeMembers.set(k, v);
     for (const [k, v] of facts.components) if (!components.has(k)) components.set(k, v);
 
-    let m: RegExpExecArray | null;
-    NAMED_HEX_RE.lastIndex = 0;
-    while ((m = NAMED_HEX_RE.exec(content)) !== null) {
+    for (const m of content.matchAll(NAMED_HEX_RE)) {
       const hex = `#${m[2].toLowerCase()}`;
       if (!isLowSpecificityHex(hex) && tokens[hex] === undefined) tokens[hex] = m[1];
     }
-    CSS_VAR_HEX_RE.lastIndex = 0;
-    while ((m = CSS_VAR_HEX_RE.exec(content)) !== null) {
+    for (const m of content.matchAll(CSS_VAR_HEX_RE)) {
       const hex = `#${m[2].toLowerCase()}`;
       if (!isLowSpecificityHex(hex) && tokens[hex] === undefined) tokens[hex] = m[1];
     }
-    CLASS_PREFIX_RE.lastIndex = 0;
-    while ((m = CLASS_PREFIX_RE.exec(content)) !== null) {
+    for (const m of content.matchAll(CLASS_PREFIX_RE)) {
       prefixCounts.set(m[1], (prefixCounts.get(m[1]) ?? 0) + 1);
     }
   }

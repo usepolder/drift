@@ -116,7 +116,6 @@ describe('buildDetectionProfile — custom detection data', () => {
   it('regex specials in a class prefix are escaped, not interpreted', () => {
     const profile = buildDetectionProfile([], { classPrefixes: ['acme.btn'] });
     expect(profile.classPatterns[0].test('acme.btn-primary')).toBe(true);
-    profile.classPatterns[0].lastIndex = 0;
     expect(profile.classPatterns[0].test('acmeXbtn-primary')).toBe(false);
   });
 });

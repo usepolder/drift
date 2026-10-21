@@ -31,24 +31,21 @@ function parseSource(fileContent: string): Ast | null {
 const REEXPORT_RE = /export\s+(?:\*|\{[^}]*\})\s+from\s+['"]([^'"]+)['"]/g;
 
 function extractNames(dts: string, names: Set<string>): void {
-  let m: RegExpExecArray | null;
-
   // export [declare] function|class|const|enum|interface|type Name
   const declRe =
     /\bexport\s+(?:declare\s+)?(?:function|class|const|enum|interface|type)\s+([a-zA-Z][a-zA-Z0-9_]*)/g;
-  while ((m = declRe.exec(dts)) !== null) {
+  for (const m of dts.matchAll(declRe)) {
     names.add(m[1]);
   }
 
   // export [type] { A, B as C, type D } — walk every specifier
   const blockRe = /\bexport\s+(?:type\s*)?\{([^}]+)\}/g;
-  while ((m = blockRe.exec(dts)) !== null) {
+  for (const m of dts.matchAll(blockRe)) {
     const block = m[1];
     // Each specifier: [type] localName [as exportedName]
     const specRe =
       /(?:^|,)\s*(?:type\s+)?([a-zA-Z_$][a-zA-Z0-9_$]*)(?:\s+as\s+([a-zA-Z_$][a-zA-Z0-9_$]*))?/g;
-    let spec: RegExpExecArray | null;
-    while ((spec = specRe.exec(block)) !== null) {
+    for (const spec of block.matchAll(specRe)) {
       const exported = spec[2] ?? spec[1];
       if (exported && exported !== 'type' && exported !== 'default') {
         names.add(exported);
@@ -141,9 +138,7 @@ export function resolveDtsExports(pkgDir: string): Set<string> {
       extractNames(dts, names);
 
       // Follow `export * from '...'` and `export { X } from '...'`
-      REEXPORT_RE.lastIndex = 0;
-      let m: RegExpExecArray | null;
-      while ((m = REEXPORT_RE.exec(dts)) !== null) {
+      for (const m of dts.matchAll(REEXPORT_RE)) {
         const specifier = m[1];
         if (!specifier.startsWith('.')) continue; // skip non-relative (already in names)
         const resolved = path.resolve(path.dirname(current), specifier);
@@ -518,16 +513,14 @@ function scanBodyForTokens(
   const tokens: string[] = [];
   const classNames: string[] = [];
 
-  HEX_COLOR_RE.lastIndex = 0;
-  let m: RegExpExecArray | null;
-  while ((m = HEX_COLOR_RE.exec(bodyText)) !== null) {
+  for (const m of bodyText.matchAll(HEX_COLOR_RE)) {
     const hex = m[0].toLowerCase();
     if (profile.tokens[hex] && !tokens.includes(hex)) tokens.push(hex);
   }
 
   for (const classRe of profile.classPatterns) {
-    classRe.lastIndex = 0; // shared /g regexes — reset between scans
-    while ((m = classRe.exec(bodyText)) !== null) {
+    // matchAll clones the regex, so shared /g patterns carry no lastIndex state
+    for (const m of bodyText.matchAll(classRe)) {
       if (!classNames.includes(m[0])) classNames.push(m[0]);
     }
   }
@@ -576,9 +569,7 @@ const JSX_ELEMENT_RE = /<([A-Z][a-zA-Z0-9]*)[\s/>]/g;
 
 function extractJsxElements(bodyText: string): string[] {
   const names: string[] = [];
-  JSX_ELEMENT_RE.lastIndex = 0;
-  let m: RegExpExecArray | null;
-  while ((m = JSX_ELEMENT_RE.exec(bodyText)) !== null) {
+  for (const m of bodyText.matchAll(JSX_ELEMENT_RE)) {
     if (!names.includes(m[1])) names.push(m[1]);
   }
   return names;
