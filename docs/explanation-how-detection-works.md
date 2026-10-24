@@ -118,7 +118,7 @@ Every one of those choices gives something up. Named honestly:
   per-run [detection profile](reference-configuration.md#detection-profiles): built-in
   knowledge ships for Carbon and MUI (applied only when that DS is configured), and
   other design systems supply their own dictionaries via the `tokens`,
-  `class_prefixes`, `prop_signatures`, `sub_components`, and `name_segments` config
+  `class_prefixes`, `css_variables`, `utility_classes`, `prop_signatures`, `sub_components`, and `name_segments` config
   keys. Without either, a repo gets the import-drift and local-shadow rules (which are
   library-agnostic) but not the heuristic look-alike rules. This is a deliberate
   precision-over-recall trade: better to miss some drift than to flood the comment.

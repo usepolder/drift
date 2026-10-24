@@ -9,6 +9,7 @@ import {
   buildDetectionProfile,
   allBuiltinProfiles,
 } from './profiles';
+import { findColors, hexNeighbours } from './colors';
 
 const BABEL_OPTIONS: ParserOptions = {
   plugins: ['typescript', 'jsx'],
@@ -442,11 +443,11 @@ function countCanonicalUsagesAst(ast: Ast, dsExports: Set<string>, canonicalPkgs
 export const CARBON_TOKENS: Record<string, string> = CARBON_PROFILE.tokens;
 export const MUI_TOKENS: Record<string, string> = MUI_PROFILE.tokens;
 
-const HEX_COLOR_RE = /#[0-9a-fA-F]{6}\b/g;
+const CSS_VAR_USE_RE = /var\(\s*(--[A-Za-z0-9_-]+)/g;
 
 export interface TokenFingerprint {
   componentName: string;
-  tokens: string[];     // Carbon hex values found in the function body
+  tokens: string[];     // DS token hex values and CSS variables found in the function body
   classNames: string[]; // cds-- class names found in the function body
 }
 
@@ -513,9 +514,19 @@ function scanBodyForTokens(
   const tokens: string[] = [];
   const classNames: string[] = [];
 
-  for (const m of bodyText.matchAll(HEX_COLOR_RE)) {
-    const hex = m[0].toLowerCase();
-    if (profile.tokens[hex] && !tokens.includes(hex)) tokens.push(hex);
+  // Any colour notation is reduced to canonical #rrggbb before the token lookup.
+  for (const color of findColors(bodyText)) {
+    const candidates = color.approximate ? hexNeighbours(color.hex) : [color.hex];
+    const hit = candidates.find((hex) => profile.tokens[hex]);
+    if (hit && !tokens.includes(hit)) tokens.push(hit);
+  }
+
+  if (profile.cssVarPrefixes.length > 0) {
+    for (const m of bodyText.matchAll(CSS_VAR_USE_RE)) {
+      if (profile.cssVarPrefixes.some((prefix) => m[1].startsWith(prefix)) && !tokens.includes(m[1])) {
+        tokens.push(m[1]);
+      }
+    }
   }
 
   for (const classRe of profile.classPatterns) {

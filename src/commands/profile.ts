@@ -18,8 +18,9 @@ const HELP = `polder-drift profile — generate .polder.profile.yml from your de
 
 Scans each package in component_library (from node_modules, or the directory named
 in library_paths) and derives:
-  tokens           named hex color constants (generic grays excluded)
+  tokens           named color constants and CSS variables, as hex/rgb()/hsl() (generic grays excluded)
   class_prefixes   repeated BEM-style class prefixes (acme--…)
+  css_variables    custom property namespaces defined by the DS (--acme-…)
   prop_signatures  distinctive component prop combinations
   sub_components   compound components (CardHeader → Card)
   name_segments    confidence-boost words for sub-component matches
@@ -83,6 +84,7 @@ function renderProfileYaml(data: CustomDetection, packages: string[]): string {
   const body: Record<string, unknown> = {};
   if (data.tokens) body.tokens = data.tokens;
   if (data.classPrefixes) body.class_prefixes = data.classPrefixes;
+  if (data.cssVariables) body.css_variables = data.cssVariables;
   if (data.propSignatures) body.prop_signatures = data.propSignatures;
   if (data.subComponents) body.sub_components = data.subComponents;
   if (data.nameSegments) body.name_segments = data.nameSegments;
@@ -162,7 +164,7 @@ export function runProfileSubcommand(argv: string[]): number {
     process.stderr.write(
       `polder-drift profile: ${pkg} — ${generated.stats.filesScanned} file(s), ` +
         `${generated.stats.signatures} prop signature(s), ${generated.stats.tokens} token(s), ` +
-        `${generated.stats.subComponents} sub-component(s), ${generated.stats.classPrefixes} class prefix(es).\n`,
+        `${generated.stats.subComponents} sub-component(s), ${generated.stats.classPrefixes} class prefix(es), ${generated.stats.cssVariables} CSS variable namespace(s).\n`,
     );
   }
 

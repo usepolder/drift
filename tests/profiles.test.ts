@@ -145,9 +145,16 @@ describe('.polder.yml custom detection keys', () => {
     expect(cfg.classPrefixes).toBeUndefined();
   });
 
-  it('rejects non-hex token keys', () => {
-    expect(() => parseConfig(BASE + 'tokens:\n  "red": brand\n')).toThrow('hex colors');
-    expect(() => parseConfig(BASE + 'tokens:\n  "#fff": brand\n')).toThrow('hex colors');
+  it('rejects token keys that are not colors', () => {
+    expect(() => parseConfig(BASE + 'tokens:\n  "red": brand\n')).toThrow('colors like');
+    expect(() => parseConfig(BASE + 'tokens:\n  "#ff": brand\n')).toThrow('colors like');
+  });
+
+  it('normalises hex3, hex8, rgb() and hsl() token keys to #rrggbb', () => {
+    const cfg = parseConfig(
+      BASE + 'tokens:\n  "#F36": a\n  "#0F62FE80": b\n  "rgb(218, 30, 40)": c\n  "hsl(0, 100%, 50%)": d\n',
+    );
+    expect(cfg.tokens).toEqual({ '#ff3366': 'a', '#0f62fe': 'b', '#da1e28': 'c', '#ff0000': 'd' });
   });
 
   it('rejects non-string token values and malformed maps', () => {

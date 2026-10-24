@@ -161,7 +161,7 @@ describe('.polder.profile.yml loading', () => {
     );
     expect(data.tokens).toEqual({ '#ff3366': 'brand/coral' });
     expect(data.classPrefixes).toEqual(['acme--']);
-    expect(() => parseProfileFile('tokens:\n  "red": x\n')).toThrow('hex colors');
+    expect(() => parseProfileFile('tokens:\n  "red": x\n')).toThrow('colors like');
   });
 
   it('resolveConfig underlays the generated file; .polder.yml keys win', () => {

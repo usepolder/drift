@@ -3,13 +3,13 @@
 /******/ 	"use strict";
 /******/ 	var __webpack_modules__ = ({
 
-/***/ 281:
+/***/ 4281:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const loader = __nccwpck_require__(950)
-const dumper = __nccwpck_require__(980)
+const loader = __nccwpck_require__(1950)
+const dumper = __nccwpck_require__(9980)
 
 function renamed (from, to) {
   return function () {
@@ -18,32 +18,32 @@ function renamed (from, to) {
   }
 }
 
-module.exports.Type = __nccwpck_require__(557)
-module.exports.Schema = __nccwpck_require__(46)
-module.exports.FAILSAFE_SCHEMA = __nccwpck_require__(832)
-module.exports.JSON_SCHEMA = __nccwpck_require__(927)
-module.exports.CORE_SCHEMA = __nccwpck_require__(746)
-module.exports.DEFAULT_SCHEMA = __nccwpck_require__(336)
+module.exports.Type = __nccwpck_require__(9557)
+module.exports.Schema = __nccwpck_require__(2046)
+module.exports.FAILSAFE_SCHEMA = __nccwpck_require__(9832)
+module.exports.JSON_SCHEMA = __nccwpck_require__(8927)
+module.exports.CORE_SCHEMA = __nccwpck_require__(5746)
+module.exports.DEFAULT_SCHEMA = __nccwpck_require__(7336)
 module.exports.load = loader.load
 module.exports.loadAll = loader.loadAll
 module.exports.dump = dumper.dump
-module.exports.YAMLException = __nccwpck_require__(248)
+module.exports.YAMLException = __nccwpck_require__(1248)
 
 // Re-export all types in case user wants to create custom schema
 module.exports.types = {
-  binary: __nccwpck_require__(149),
-  float: __nccwpck_require__(584),
-  map: __nccwpck_require__(316),
-  null: __nccwpck_require__(333),
-  pairs: __nccwpck_require__(267),
-  set: __nccwpck_require__(758),
-  timestamp: __nccwpck_require__(966),
-  bool: __nccwpck_require__(296),
-  int: __nccwpck_require__(271),
-  merge: __nccwpck_require__(854),
-  omap: __nccwpck_require__(649),
-  seq: __nccwpck_require__(161),
-  str: __nccwpck_require__(929)
+  binary: __nccwpck_require__(8149),
+  float: __nccwpck_require__(7584),
+  map: __nccwpck_require__(7316),
+  null: __nccwpck_require__(4333),
+  pairs: __nccwpck_require__(6267),
+  set: __nccwpck_require__(8758),
+  timestamp: __nccwpck_require__(8966),
+  bool: __nccwpck_require__(7296),
+  int: __nccwpck_require__(2271),
+  merge: __nccwpck_require__(6854),
+  omap: __nccwpck_require__(8649),
+  seq: __nccwpck_require__(7161),
+  str: __nccwpck_require__(3929)
 }
 
 // Removed functions from JS-YAML 3.0.x
@@ -54,7 +54,7 @@ module.exports.safeDump = renamed('safeDump', 'dump')
 
 /***/ }),
 
-/***/ 816:
+/***/ 9816:
 /***/ ((module) => {
 
 
@@ -111,14 +111,14 @@ module.exports.extend = extend
 
 /***/ }),
 
-/***/ 980:
+/***/ 9980:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const common = __nccwpck_require__(816)
-const YAMLException = __nccwpck_require__(248)
-const DEFAULT_SCHEMA = __nccwpck_require__(336)
+const common = __nccwpck_require__(9816)
+const YAMLException = __nccwpck_require__(1248)
+const DEFAULT_SCHEMA = __nccwpck_require__(7336)
 
 const _toString = Object.prototype.toString
 const _hasOwnProperty = Object.prototype.hasOwnProperty
@@ -1055,7 +1055,7 @@ module.exports.dump = dump
 
 /***/ }),
 
-/***/ 248:
+/***/ 1248:
 /***/ ((module) => {
 
 // YAML error class. http://stackoverflow.com/questions/8458984
@@ -1113,15 +1113,15 @@ module.exports = YAMLException
 
 /***/ }),
 
-/***/ 950:
+/***/ 1950:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const common = __nccwpck_require__(816)
-const YAMLException = __nccwpck_require__(248)
-const makeSnippet = __nccwpck_require__(440)
-const DEFAULT_SCHEMA = __nccwpck_require__(336)
+const common = __nccwpck_require__(9816)
+const YAMLException = __nccwpck_require__(1248)
+const makeSnippet = __nccwpck_require__(9440)
+const DEFAULT_SCHEMA = __nccwpck_require__(7336)
 
 const _hasOwnProperty = Object.prototype.hasOwnProperty
 
@@ -2923,13 +2923,13 @@ module.exports.load = load
 
 /***/ }),
 
-/***/ 46:
+/***/ 2046:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const YAMLException = __nccwpck_require__(248)
-const Type = __nccwpck_require__(557)
+const YAMLException = __nccwpck_require__(1248)
+const Type = __nccwpck_require__(9557)
 
 function compileList (schema, name) {
   const result = []
@@ -3039,7 +3039,7 @@ module.exports = Schema
 
 /***/ }),
 
-/***/ 746:
+/***/ 5746:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 // Standard YAML's Core schema.
@@ -3050,12 +3050,12 @@ module.exports = Schema
 
 
 
-module.exports = __nccwpck_require__(927)
+module.exports = __nccwpck_require__(8927)
 
 
 /***/ }),
 
-/***/ 336:
+/***/ 7336:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 // JS-YAML's default schema for `safeLoad` function.
@@ -3066,23 +3066,23 @@ module.exports = __nccwpck_require__(927)
 
 
 
-module.exports = (__nccwpck_require__(746).extend)({
+module.exports = (__nccwpck_require__(5746).extend)({
   implicit: [
-    __nccwpck_require__(966),
-    __nccwpck_require__(854)
+    __nccwpck_require__(8966),
+    __nccwpck_require__(6854)
   ],
   explicit: [
-    __nccwpck_require__(149),
-    __nccwpck_require__(649),
-    __nccwpck_require__(267),
-    __nccwpck_require__(758)
+    __nccwpck_require__(8149),
+    __nccwpck_require__(8649),
+    __nccwpck_require__(6267),
+    __nccwpck_require__(8758)
   ]
 })
 
 
 /***/ }),
 
-/***/ 832:
+/***/ 9832:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 // Standard YAML's Failsafe schema.
@@ -3090,20 +3090,20 @@ module.exports = (__nccwpck_require__(746).extend)({
 
 
 
-const Schema = __nccwpck_require__(46)
+const Schema = __nccwpck_require__(2046)
 
 module.exports = new Schema({
   explicit: [
-    __nccwpck_require__(929),
-    __nccwpck_require__(161),
-    __nccwpck_require__(316)
+    __nccwpck_require__(3929),
+    __nccwpck_require__(7161),
+    __nccwpck_require__(7316)
   ]
 })
 
 
 /***/ }),
 
-/***/ 927:
+/***/ 8927:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 // Standard YAML's JSON schema.
@@ -3115,24 +3115,24 @@ module.exports = new Schema({
 
 
 
-module.exports = (__nccwpck_require__(832).extend)({
+module.exports = (__nccwpck_require__(9832).extend)({
   implicit: [
-    __nccwpck_require__(333),
-    __nccwpck_require__(296),
-    __nccwpck_require__(271),
-    __nccwpck_require__(584)
+    __nccwpck_require__(4333),
+    __nccwpck_require__(7296),
+    __nccwpck_require__(2271),
+    __nccwpck_require__(7584)
   ]
 })
 
 
 /***/ }),
 
-/***/ 440:
+/***/ 9440:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const common = __nccwpck_require__(816)
+const common = __nccwpck_require__(9816)
 
 // get snippet for a single line, respecting maxLength
 function getLine (buffer, lineStart, lineEnd, position, maxLineLength) {
@@ -3230,12 +3230,12 @@ module.exports = makeSnippet
 
 /***/ }),
 
-/***/ 557:
+/***/ 9557:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const YAMLException = __nccwpck_require__(248)
+const YAMLException = __nccwpck_require__(1248)
 
 const TYPE_CONSTRUCTOR_OPTIONS = [
   'kind',
@@ -3303,12 +3303,12 @@ module.exports = Type
 
 /***/ }),
 
-/***/ 149:
+/***/ 8149:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const Type = __nccwpck_require__(557)
+const Type = __nccwpck_require__(9557)
 
 // [ 64, 65, 66 ] -> [ padding, CR, LF ]
 const BASE64_MAP = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=\n\r'
@@ -3432,12 +3432,12 @@ module.exports = new Type('tag:yaml.org,2002:binary', {
 
 /***/ }),
 
-/***/ 296:
+/***/ 7296:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const Type = __nccwpck_require__(557)
+const Type = __nccwpck_require__(9557)
 
 function resolveYamlBoolean (data) {
   if (data === null) return false
@@ -3474,13 +3474,13 @@ module.exports = new Type('tag:yaml.org,2002:bool', {
 
 /***/ }),
 
-/***/ 584:
+/***/ 7584:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const common = __nccwpck_require__(816)
-const Type = __nccwpck_require__(557)
+const common = __nccwpck_require__(9816)
+const Type = __nccwpck_require__(9557)
 
 const YAML_FLOAT_PATTERN = new RegExp(
   // 2.5e4, 2.5 and integers
@@ -3580,13 +3580,13 @@ module.exports = new Type('tag:yaml.org,2002:float', {
 
 /***/ }),
 
-/***/ 271:
+/***/ 2271:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const common = __nccwpck_require__(816)
-const Type = __nccwpck_require__(557)
+const common = __nccwpck_require__(9816)
+const Type = __nccwpck_require__(9557)
 
 function isHexCode (c) {
   return ((c >= 0x30/* 0 */) && (c <= 0x39/* 9 */)) ||
@@ -3729,12 +3729,12 @@ module.exports = new Type('tag:yaml.org,2002:int', {
 
 /***/ }),
 
-/***/ 316:
+/***/ 7316:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const Type = __nccwpck_require__(557)
+const Type = __nccwpck_require__(9557)
 
 module.exports = new Type('tag:yaml.org,2002:map', {
   kind: 'mapping',
@@ -3744,12 +3744,12 @@ module.exports = new Type('tag:yaml.org,2002:map', {
 
 /***/ }),
 
-/***/ 854:
+/***/ 6854:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const Type = __nccwpck_require__(557)
+const Type = __nccwpck_require__(9557)
 
 function resolveYamlMerge (data) {
   return data === '<<' || data === null
@@ -3763,12 +3763,12 @@ module.exports = new Type('tag:yaml.org,2002:merge', {
 
 /***/ }),
 
-/***/ 333:
+/***/ 4333:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const Type = __nccwpck_require__(557)
+const Type = __nccwpck_require__(9557)
 
 function resolveYamlNull (data) {
   if (data === null) return true
@@ -3805,12 +3805,12 @@ module.exports = new Type('tag:yaml.org,2002:null', {
 
 /***/ }),
 
-/***/ 649:
+/***/ 8649:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const Type = __nccwpck_require__(557)
+const Type = __nccwpck_require__(9557)
 
 const _hasOwnProperty = Object.prototype.hasOwnProperty
 const _toString = Object.prototype.toString
@@ -3857,12 +3857,12 @@ module.exports = new Type('tag:yaml.org,2002:omap', {
 
 /***/ }),
 
-/***/ 267:
+/***/ 6267:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const Type = __nccwpck_require__(557)
+const Type = __nccwpck_require__(9557)
 
 const _toString = Object.prototype.toString
 
@@ -3914,12 +3914,12 @@ module.exports = new Type('tag:yaml.org,2002:pairs', {
 
 /***/ }),
 
-/***/ 161:
+/***/ 7161:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const Type = __nccwpck_require__(557)
+const Type = __nccwpck_require__(9557)
 
 module.exports = new Type('tag:yaml.org,2002:seq', {
   kind: 'sequence',
@@ -3929,12 +3929,12 @@ module.exports = new Type('tag:yaml.org,2002:seq', {
 
 /***/ }),
 
-/***/ 758:
+/***/ 8758:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const Type = __nccwpck_require__(557)
+const Type = __nccwpck_require__(9557)
 
 const _hasOwnProperty = Object.prototype.hasOwnProperty
 
@@ -3965,12 +3965,12 @@ module.exports = new Type('tag:yaml.org,2002:set', {
 
 /***/ }),
 
-/***/ 929:
+/***/ 3929:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const Type = __nccwpck_require__(557)
+const Type = __nccwpck_require__(9557)
 
 module.exports = new Type('tag:yaml.org,2002:str', {
   kind: 'scalar',
@@ -3980,12 +3980,12 @@ module.exports = new Type('tag:yaml.org,2002:str', {
 
 /***/ }),
 
-/***/ 966:
+/***/ 8966:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const Type = __nccwpck_require__(557)
+const Type = __nccwpck_require__(9557)
 
 const YAML_DATE_REGEXP = new RegExp(
   '^([0-9][0-9][0-9][0-9])' + // [1] year
@@ -4075,7 +4075,7 @@ module.exports = new Type('tag:yaml.org,2002:timestamp', {
 
 /***/ }),
 
-/***/ 581:
+/***/ 5581:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -4120,14 +4120,14 @@ exports.buildReport = buildReport;
 exports.formatHuman = formatHuman;
 exports.runCli = runCli;
 exports.runScan = runScan;
-const fs = __importStar(__nccwpck_require__(896));
-const path = __importStar(__nccwpck_require__(928));
-const child_process_1 = __nccwpck_require__(317);
-const resolve_config_1 = __nccwpck_require__(190);
-const parser_1 = __nccwpck_require__(196);
-const findings_1 = __nccwpck_require__(363);
+const fs = __importStar(__nccwpck_require__(9896));
+const path = __importStar(__nccwpck_require__(6928));
+const child_process_1 = __nccwpck_require__(5317);
+const resolve_config_1 = __nccwpck_require__(9190);
+const parser_1 = __nccwpck_require__(7196);
+const findings_1 = __nccwpck_require__(1363);
 const suppress_1 = __nccwpck_require__(10);
-const profiles_1 = __nccwpck_require__(717);
+const profiles_1 = __nccwpck_require__(9717);
 const init_1 = __nccwpck_require__(722);
 const profile_1 = __nccwpck_require__(463);
 exports.SOURCE_RE = /\.(ts|tsx|js|jsx)$/;
@@ -4494,7 +4494,7 @@ if (require.main === require.cache[eval('__filename')]) {
     const argv = process.argv.slice(2);
     if (argv[0] === 'ci') {
         // Async command (posts a PR comment); lazy-import to keep `scan` startup light.
-        Promise.resolve().then(() => __importStar(__nccwpck_require__(59))).then(({ runCiSubcommand }) => runCiSubcommand(argv.slice(1)))
+        Promise.resolve().then(() => __importStar(__nccwpck_require__(5440))).then(({ runCiSubcommand }) => runCiSubcommand(argv.slice(1)))
             .then((code) => process.exit(code))
             .catch((err) => {
             process.stderr.write(`polder-drift: ${err.message}\n`);
@@ -4504,7 +4504,7 @@ if (require.main === require.cache[eval('__filename')]) {
     else if (argv[0] === 'claude-hook') {
         // Lazy-import like `ci`. Exit 1 on loader failure (non-blocking for the agent,
         // stderr shown to the user): a broken hook must never block the edit loop.
-        Promise.resolve().then(() => __importStar(__nccwpck_require__(568))).then(({ runClaudeHookSubcommand }) => process.exit(runClaudeHookSubcommand()))
+        Promise.resolve().then(() => __importStar(__nccwpck_require__(2568))).then(({ runClaudeHookSubcommand }) => process.exit(runClaudeHookSubcommand()))
             .catch((err) => {
             process.stderr.write(`polder-drift: ${err.message}\n`);
             process.exit(1);
@@ -4518,7 +4518,117 @@ if (require.main === require.cache[eval('__filename')]) {
 
 /***/ }),
 
-/***/ 59:
+/***/ 6411:
+/***/ ((__unused_webpack_module, exports) => {
+
+
+/**
+ * Colour normalisation for token fingerprinting. Every colour notation in source
+ * (3/4/6/8-digit hex, rgb()/rgba(), hsl()/hsla()) is reduced to the canonical
+ * lowercase `#rrggbb` the profile's token map is keyed on, with alpha dropped, so one
+ * token map matches however the value was written. Only values that land in the
+ * profile fire, so the low-false-positive stance is unchanged.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.normalizeColor = normalizeColor;
+exports.findColors = findColors;
+exports.hexNeighbours = hexNeighbours;
+const HEX_RE = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/gi;
+// Whole-notation scanners. The trailing lookahead keeps `#0f62fe80x` / `#12345` from
+// matching as a shorter colour.
+const SCAN_RE = /#[0-9a-fA-F]{3,8}(?![0-9a-zA-Z_-])|\b(?:rgba?|hsla?)\(\s*[^()]*\)/g;
+const toHex2 = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+function channel(raw) {
+    const m = /^(\d*\.?\d+)(%?)$/.exec(raw);
+    if (!m)
+        return null;
+    const v = parseFloat(m[1]);
+    return m[2] ? (v / 100) * 255 : v;
+}
+function parseRgb(args) {
+    // Legacy `r, g, b[, a]` and modern `r g b [/ a]` both split on commas/spaces/slash.
+    const parts = args.split(/[\s,/]+/).filter(Boolean);
+    if (parts.length < 3 || parts.length > 4)
+        return null;
+    const rgb = parts.slice(0, 3).map(channel);
+    if (rgb.some((c) => c === null))
+        return null;
+    return `#${rgb.map((c) => toHex2(c)).join('')}`;
+}
+function parseHsl(args) {
+    const parts = args.split(/[\s,/]+/).filter(Boolean);
+    if (parts.length < 3 || parts.length > 4)
+        return null;
+    const hm = /^(-?\d*\.?\d+)(deg)?$/.exec(parts[0]);
+    const sm = /^(\d*\.?\d+)%$/.exec(parts[1]);
+    const lm = /^(\d*\.?\d+)%$/.exec(parts[2]);
+    if (!hm || !sm || !lm)
+        return null;
+    const h = (((parseFloat(hm[1]) % 360) + 360) % 360) / 360;
+    const s = Math.min(1, parseFloat(sm[1]) / 100);
+    const l = Math.min(1, parseFloat(lm[1]) / 100);
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    const hue = (t) => {
+        const x = (t + 1) % 1;
+        if (x < 1 / 6)
+            return p + (q - p) * 6 * x;
+        if (x < 1 / 2)
+            return q;
+        if (x < 2 / 3)
+            return p + (q - p) * (2 / 3 - x) * 6;
+        return p;
+    };
+    return `#${[hue(h + 1 / 3), hue(h), hue(h - 1 / 3)].map((c) => toHex2(c * 255)).join('')}`;
+}
+/** Canonical `#rrggbb` for one complete colour notation, or null if it isn't one. */
+function normalizeColor(raw) {
+    const value = raw.trim();
+    const hexMatch = [...value.matchAll(HEX_RE)][0];
+    if (hexMatch) {
+        let digits = hexMatch[1].toLowerCase();
+        if (digits.length <= 4)
+            digits = [...digits].map((c) => c + c).join('');
+        return { hex: `#${digits.slice(0, 6)}`, approximate: false };
+    }
+    const fn = [...value.matchAll(/^(rgba?|hsla?)\(\s*([^()]*)\)$/gi)][0];
+    if (!fn)
+        return null;
+    const isHsl = fn[1].toLowerCase().startsWith('hsl');
+    const hex = isHsl ? parseHsl(fn[2]) : parseRgb(fn[2]);
+    return hex ? { hex, approximate: isHsl } : null;
+}
+/** Every colour written in `text`, normalised, in order of appearance. */
+function findColors(text) {
+    const out = [];
+    for (const m of text.matchAll(SCAN_RE)) {
+        const color = normalizeColor(m[0]);
+        if (color)
+            out.push(color);
+    }
+    return out;
+}
+// Integer-percent hsl() (what people write by hand) can drift up to 2 per channel from
+// the hex it was derived from.
+const HSL_TOLERANCE = [0, -1, 1, -2, 2];
+/** The canonical hex plus its near neighbours, for approximate (hsl) lookups. */
+function hexNeighbours(hex) {
+    const base = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    const out = [];
+    for (const dr of HSL_TOLERANCE) {
+        for (const dg of HSL_TOLERANCE) {
+            for (const db of HSL_TOLERANCE) {
+                out.push(`#${[base[0] + dr, base[1] + dg, base[2] + db].map(toHex2).join('')}`);
+            }
+        }
+    }
+    return out;
+}
+
+
+/***/ }),
+
+/***/ 5440:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 
@@ -4528,8 +4638,8 @@ exports.runCiSubcommand = runCiSubcommand;
  * `polder-drift ci` — post the drift comment from inside a CI PR build.
  * v1 targets Azure DevOps (GitHub uses the Action). Local runs should use `scan`.
  */
-const detect_1 = __nccwpck_require__(530);
-const azdo_1 = __nccwpck_require__(588);
+const detect_1 = __nccwpck_require__(4149);
+const azdo_1 = __nccwpck_require__(1588);
 const run_ci_1 = __nccwpck_require__(479);
 async function runCiSubcommand(_argv) {
     const warn = (m) => {
@@ -4561,7 +4671,7 @@ async function runCiSubcommand(_argv) {
 
 /***/ }),
 
-/***/ 568:
+/***/ 2568:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -4614,11 +4724,11 @@ exports.runClaudeHookSubcommand = runClaudeHookSubcommand;
  *
  * Installed by `polder-drift init --claude`; see docs/howto-claude-code.md.
  */
-const fs = __importStar(__nccwpck_require__(896));
-const path = __importStar(__nccwpck_require__(928));
-const resolve_config_1 = __nccwpck_require__(190);
-const cli_1 = __nccwpck_require__(581);
-const findings_1 = __nccwpck_require__(363);
+const fs = __importStar(__nccwpck_require__(9896));
+const path = __importStar(__nccwpck_require__(6928));
+const resolve_config_1 = __nccwpck_require__(9190);
+const cli_1 = __nccwpck_require__(5581);
+const findings_1 = __nccwpck_require__(1363);
 function runClaudeHookSubcommand(payloadText) {
     let raw;
     if (payloadText !== undefined) {
@@ -4730,10 +4840,10 @@ exports.runInitSubcommand = runInitSubcommand;
  * Both writes are idempotent: re-running refreshes the CLAUDE.md section in place and
  * never duplicates the hook.
  */
-const fs = __importStar(__nccwpck_require__(896));
-const path = __importStar(__nccwpck_require__(928));
-const detect_1 = __nccwpck_require__(52);
-const config_1 = __nccwpck_require__(973);
+const fs = __importStar(__nccwpck_require__(9896));
+const path = __importStar(__nccwpck_require__(6928));
+const detect_1 = __nccwpck_require__(1052);
+const config_1 = __nccwpck_require__(2973);
 exports.HOOK_COMMAND = 'npx -y @usepolder/drift claude-hook';
 exports.HOOK_MATCHER = 'Write|Edit|MultiEdit';
 const HOOK_ENTRY = {
@@ -4964,19 +5074,20 @@ exports.runProfileSubcommand = runProfileSubcommand;
  * The output is a reviewable, committable file — generation never happens silently
  * at scan time. `.polder.yml` keys override entries in this file.
  */
-const fs = __importStar(__nccwpck_require__(896));
-const path = __importStar(__nccwpck_require__(928));
-const yaml = __importStar(__nccwpck_require__(281));
-const resolve_config_1 = __nccwpck_require__(190);
-const parser_1 = __nccwpck_require__(196);
-const profiles_1 = __nccwpck_require__(717);
-const generate_profile_1 = __nccwpck_require__(756);
+const fs = __importStar(__nccwpck_require__(9896));
+const path = __importStar(__nccwpck_require__(6928));
+const yaml = __importStar(__nccwpck_require__(4281));
+const resolve_config_1 = __nccwpck_require__(9190);
+const parser_1 = __nccwpck_require__(7196);
+const profiles_1 = __nccwpck_require__(9717);
+const generate_profile_1 = __nccwpck_require__(8756);
 const HELP = `polder-drift profile — generate .polder.profile.yml from your design system's source
 
 Scans each package in component_library (from node_modules, or the directory named
 in library_paths) and derives:
-  tokens           named hex color constants (generic grays excluded)
+  tokens           named color constants and CSS variables, as hex/rgb()/hsl() (generic grays excluded)
   class_prefixes   repeated BEM-style class prefixes (acme--…)
+  css_variables    custom property namespaces defined by the DS (--acme-…)
   prop_signatures  distinctive component prop combinations
   sub_components   compound components (CardHeader → Card)
   name_segments    confidence-boost words for sub-component matches
@@ -5036,6 +5147,8 @@ function renderProfileYaml(data, packages) {
         body.tokens = data.tokens;
     if (data.classPrefixes)
         body.class_prefixes = data.classPrefixes;
+    if (data.cssVariables)
+        body.css_variables = data.cssVariables;
     if (data.propSignatures)
         body.prop_signatures = data.propSignatures;
     if (data.subComponents)
@@ -5105,7 +5218,7 @@ function runProfileSubcommand(argv) {
         scanned.push(pkg);
         process.stderr.write(`polder-drift profile: ${pkg} — ${generated.stats.filesScanned} file(s), ` +
             `${generated.stats.signatures} prop signature(s), ${generated.stats.tokens} token(s), ` +
-            `${generated.stats.subComponents} sub-component(s), ${generated.stats.classPrefixes} class prefix(es).\n`);
+            `${generated.stats.subComponents} sub-component(s), ${generated.stats.classPrefixes} class prefix(es), ${generated.stats.cssVariables} CSS variable namespace(s).\n`);
     }
     if (scanned.length === 0 || Object.keys(data).length === 0) {
         process.stderr.write('polder-drift profile: nothing distinctive found — no file written. The export-based ' +
@@ -5122,7 +5235,7 @@ function runProfileSubcommand(argv) {
 
 /***/ }),
 
-/***/ 981:
+/***/ 4981:
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -5154,7 +5267,7 @@ function adoptionPct(canonicalUsages, driftedComponents) {
 
 /***/ }),
 
-/***/ 701:
+/***/ 3701:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 
@@ -5167,11 +5280,11 @@ exports.analyzePr = analyzePr;
  * this is fully unit-testable without git or a network. GitHub and Azure DevOps
  * transports supply the readers and then post `result.body` when `result.shouldComment`.
  */
-const parser_1 = __nccwpck_require__(196);
-const findings_1 = __nccwpck_require__(363);
+const parser_1 = __nccwpck_require__(7196);
+const findings_1 = __nccwpck_require__(1363);
 const suppress_1 = __nccwpck_require__(10);
-const render_1 = __nccwpck_require__(665);
-const adoption_1 = __nccwpck_require__(981);
+const render_1 = __nccwpck_require__(5665);
+const adoption_1 = __nccwpck_require__(4981);
 function analyzePr(p) {
     const baseAvailable = p.baseAvailable !== false;
     let findings = [];
@@ -5243,7 +5356,7 @@ function analyzePr(p) {
 
 /***/ }),
 
-/***/ 363:
+/***/ 1363:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 
@@ -5261,7 +5374,7 @@ exports.countDriftedComponents = countDriftedComponents;
  *
  *   FullDriftResult ──► flattenFindings() ──► Finding[]  (each with a stable id)
  */
-const crypto_1 = __nccwpck_require__(982);
+const crypto_1 = __nccwpck_require__(6982);
 const SEVERITY = {
     'import-drift': 'high',
     'local-shadow': 'high',
@@ -5333,14 +5446,14 @@ function countDriftedComponents(findings) {
 
 /***/ }),
 
-/***/ 665:
+/***/ 5665:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.COMMENT_MARKER = void 0;
 exports.renderComment = renderComment;
-const findings_1 = __nccwpck_require__(363);
+const findings_1 = __nccwpck_require__(1363);
 exports.COMMENT_MARKER = '<!-- polder-drift-comment -->';
 const SEV_RANK = { high: 2, medium: 1 };
 const RULE_ORDER = ['import-drift', 'local-shadow', 'token-fingerprint', 'prop-match', 'subcomponent'];
@@ -5494,8 +5607,8 @@ exports.applySuppressions = applySuppressions;
  *   path:src/legacy/**       suppress findings under a path glob
  *   src/legacy/**            bare line is treated as a path glob too
  */
-const fs = __importStar(__nccwpck_require__(896));
-const path = __importStar(__nccwpck_require__(928));
+const fs = __importStar(__nccwpck_require__(9896));
+const path = __importStar(__nccwpck_require__(6928));
 const ID_RE = /^[0-9a-f]{12}$/;
 function parseSuppressions(content) {
     const ids = new Set();
@@ -5566,7 +5679,7 @@ function applySuppressions(findings, s) {
 
 /***/ }),
 
-/***/ 973:
+/***/ 2973:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -5607,8 +5720,8 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.parseConfig = parseConfig;
 exports.parseProfileFile = parseProfileFile;
 exports.readConfig = readConfig;
-const yaml = __importStar(__nccwpck_require__(281));
-const HEX_RE = /^#[0-9a-f]{6}$/;
+const yaml = __importStar(__nccwpck_require__(4281));
+const colors_1 = __nccwpck_require__(6411);
 function requireStringMap(value, key) {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) {
         throw new Error(`${key} must be a mapping of strings to strings`);
@@ -5673,17 +5786,17 @@ function parseConfig(raw) {
     Object.assign(config, readCustomKeys(cfg));
     return config;
 }
-/** Parse + validate the five custom-detection keys from a raw YAML object. */
+/** Parse + validate the custom-detection keys from a raw YAML object. */
 function readCustomKeys(cfg) {
     const out = {};
     if (cfg.tokens !== undefined) {
         const tokens = {};
         for (const [k, v] of Object.entries(requireStringMap(cfg.tokens, 'tokens'))) {
-            const hex = k.toLowerCase();
-            if (!HEX_RE.test(hex)) {
-                throw new Error(`tokens keys must be 6-digit hex colors like "#0f62fe" (got "${k}")`);
+            const color = (0, colors_1.normalizeColor)(k);
+            if (!color) {
+                throw new Error(`tokens keys must be colors like "#0f62fe", "#fff", "rgb(15, 98, 254)" or "hsl(219, 99%, 53%)" (got "${k}")`);
             }
-            tokens[hex] = v;
+            tokens[color.hex] = v;
         }
         out.tokens = tokens;
     }
@@ -5692,6 +5805,19 @@ function readCustomKeys(cfg) {
             throw new Error('class_prefixes must be an array of non-empty strings');
         }
         out.classPrefixes = cfg.class_prefixes;
+    }
+    if (cfg.css_variables !== undefined) {
+        if (!Array.isArray(cfg.css_variables) ||
+            !cfg.css_variables.every((x) => typeof x === 'string' && x.startsWith('--') && x.length > 2)) {
+            throw new Error('css_variables must be an array of custom property names or prefixes like "--ds-color-"');
+        }
+        out.cssVariables = cfg.css_variables;
+    }
+    if (cfg.utility_classes !== undefined) {
+        if (!Array.isArray(cfg.utility_classes) || !cfg.utility_classes.every((x) => typeof x === 'string' && x.length > 0)) {
+            throw new Error('utility_classes must be an array of non-empty class patterns like "bg-brand-*"');
+        }
+        out.utilityClasses = cfg.utility_classes;
     }
     if (cfg.prop_signatures !== undefined) {
         if (typeof cfg.prop_signatures !== 'object' || cfg.prop_signatures === null || Array.isArray(cfg.prop_signatures)) {
@@ -5720,7 +5846,7 @@ function readCustomKeys(cfg) {
 }
 /**
  * Parse a generated `.polder.profile.yml` (written by `polder-drift profile`).
- * Accepts only the five custom-detection keys, validated exactly like `.polder.yml`;
+ * Accepts only the custom-detection keys, validated exactly like `.polder.yml`;
  * unknown keys are ignored so the file can carry generator metadata.
  */
 function parseProfileFile(raw) {
@@ -5747,7 +5873,7 @@ function readConfig(content) {
 
 /***/ }),
 
-/***/ 52:
+/***/ 1052:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -5791,8 +5917,8 @@ exports.detectComponentLibrary = detectComponentLibrary;
  * Zero-config: detect the design-system package from package.json so a `.polder.yml`
  * is not required in the common case. Explicit config always wins (see resolve-config).
  */
-const fs = __importStar(__nccwpck_require__(896));
-const path = __importStar(__nccwpck_require__(928));
+const fs = __importStar(__nccwpck_require__(9896));
+const path = __importStar(__nccwpck_require__(6928));
 /** Curated, well-known design-system packages, matched against deps/peerDeps. */
 exports.KNOWN_DS_PACKAGES = [
     '@carbon/react',
@@ -5836,7 +5962,7 @@ function detectComponentLibrary(cwd, known = exports.KNOWN_DS_PACKAGES) {
 
 /***/ }),
 
-/***/ 756:
+/***/ 8756:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -5887,9 +6013,10 @@ exports.generateDetectionData = generateDetectionData;
  * every PR in the repo, so anything generic gets filtered out and the output is a
  * reviewable file, never invisible runtime magic. Better to emit nothing than noise.
  */
-const fs = __importStar(__nccwpck_require__(896));
-const path = __importStar(__nccwpck_require__(928));
-const parser_1 = __nccwpck_require__(429);
+const fs = __importStar(__nccwpck_require__(9896));
+const path = __importStar(__nccwpck_require__(6928));
+const parser_1 = __nccwpck_require__(5429);
+const colors_1 = __nccwpck_require__(6411);
 const BABEL_OPTIONS = {
     plugins: ['typescript', 'jsx'],
     sourceType: 'module',
@@ -5935,7 +6062,8 @@ const SKIP_DIRS = new Set([
     'node_modules', '.git', 'dist', 'build', 'out', 'coverage',
     '__tests__', '__mocks__', '__snapshots__', 'storybook-static',
 ]);
-const SOURCE_FILE_RE = /\.(ts|tsx|js|jsx)$/;
+const SOURCE_FILE_RE = /\.(ts|tsx|js|jsx|css|scss|less)$/;
+const STYLE_FILE_RE = /\.(css|scss|less)$/;
 const NON_COMPONENT_FILE_RE = /\.(test|spec|stories)\.|\.stories\./;
 // ── File collection ───────────────────────────────────────────────────────────
 function collectSourceFiles(pkgDir) {
@@ -6057,12 +6185,19 @@ function extractFileFacts(content) {
     return facts;
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
-// Named hex assignments: `coral: '#ff3366'`, `export const brandRed = "#da1e28"`,
-// and CSS custom properties in template CSS: `--brand-coral: #ff3366`.
-const NAMED_HEX_RE = /([A-Za-z_$][A-Za-z0-9_$]*)\s*[:=]\s*['"]#([0-9a-fA-F]{6})['"]/g;
-const CSS_VAR_HEX_RE = /(--[a-z][a-z0-9-]*)\s*:\s*#([0-9a-fA-F]{6})\b/g;
+// Named colour assignments: `coral: '#ff3366'`, `export const brandRed = "rgb(218, 30, 40)"`.
+const NAMED_COLOR_RE = /([A-Za-z_$][A-Za-z0-9_$]*)\s*[:=]\s*['"]([^'"\n]{3,60})['"]/g;
+// CSS custom property definitions, in .css files or template CSS: `--brand-coral: #ff3366`.
+const CSS_VAR_DEF_RE = /(--[a-z][a-z0-9-]*)\s*:\s*([^;}\n'"`]+)/g;
 // BEM-ish DS class prefixes: the `acme` of `acme--button` in a string literal.
 const CLASS_PREFIX_RE = /['"`]([a-z][a-z0-9]*(?:-[a-z0-9]+)*)--[a-z]/g;
+// First segments of custom property names that belong to a framework or are generic
+// vocabulary, never a distinctive DS namespace (`--tw-ring`, `--color-primary`).
+const GENERIC_VAR_NAMESPACES = new Set([
+    'tw', 'radix', 'webkit', 'moz', 'ms', 'color', 'colors', 'spacing', 'space', 'font', 'size',
+    'text', 'bg', 'border', 'radius', 'shadow', 'z', 'gap', 'width', 'height', 'line', 'letter',
+]);
+const CSS_VAR_NAMESPACE_MIN_NAMES = 3;
 function isLowSpecificityHex(hex) {
     // Pure grays (incl. #ffffff/#000000) show up in any codebase — never tokens.
     const [r, g, b] = [hex.slice(1, 3), hex.slice(3, 5), hex.slice(5, 7)];
@@ -6096,6 +6231,7 @@ function generateDetectionData(pkgDir, dsExports) {
     const components = new Map();
     const tokens = {};
     const prefixCounts = new Map();
+    const varNamesByNamespace = new Map();
     for (const file of files) {
         let content;
         try {
@@ -6104,22 +6240,32 @@ function generateDetectionData(pkgDir, dsExports) {
         catch {
             continue;
         }
-        const facts = extractFileFacts(content);
-        for (const [k, v] of facts.typeMembers)
-            if (!typeMembers.has(k))
-                typeMembers.set(k, v);
-        for (const [k, v] of facts.components)
-            if (!components.has(k))
-                components.set(k, v);
-        for (const m of content.matchAll(NAMED_HEX_RE)) {
-            const hex = `#${m[2].toLowerCase()}`;
-            if (!isLowSpecificityHex(hex) && tokens[hex] === undefined)
-                tokens[hex] = m[1];
+        if (!STYLE_FILE_RE.test(file)) {
+            const facts = extractFileFacts(content);
+            for (const [k, v] of facts.typeMembers)
+                if (!typeMembers.has(k))
+                    typeMembers.set(k, v);
+            for (const [k, v] of facts.components)
+                if (!components.has(k))
+                    components.set(k, v);
+            for (const m of content.matchAll(NAMED_COLOR_RE)) {
+                const color = (0, colors_1.normalizeColor)(m[2]);
+                if (color && !isLowSpecificityHex(color.hex) && tokens[color.hex] === undefined) {
+                    tokens[color.hex] = m[1];
+                }
+            }
         }
-        for (const m of content.matchAll(CSS_VAR_HEX_RE)) {
-            const hex = `#${m[2].toLowerCase()}`;
-            if (!isLowSpecificityHex(hex) && tokens[hex] === undefined)
-                tokens[hex] = m[1];
+        for (const m of content.matchAll(CSS_VAR_DEF_RE)) {
+            const color = (0, colors_1.normalizeColor)(m[2]);
+            if (color && !isLowSpecificityHex(color.hex) && tokens[color.hex] === undefined) {
+                tokens[color.hex] = m[1];
+            }
+            const namespace = /^--([a-z][a-z0-9]*)-[a-z0-9]/.exec(m[1])?.[1];
+            if (namespace && !GENERIC_VAR_NAMESPACES.has(namespace)) {
+                const names = varNamesByNamespace.get(namespace) ?? new Set();
+                names.add(m[1]);
+                varNamesByNamespace.set(namespace, names);
+            }
         }
         for (const m of content.matchAll(CLASS_PREFIX_RE)) {
             prefixCounts.set(m[1], (prefixCounts.get(m[1]) ?? 0) + 1);
@@ -6170,6 +6316,10 @@ function generateDetectionData(pkgDir, dsExports) {
         .filter(([, count]) => count >= CLASS_PREFIX_MIN_OCCURRENCES)
         .map(([prefix]) => `${prefix}--`)
         .sort();
+    const cssVariables = [...varNamesByNamespace.entries()]
+        .filter(([, names]) => names.size >= CSS_VAR_NAMESPACE_MIN_NAMES)
+        .map(([namespace]) => `--${namespace}-`)
+        .sort();
     const cappedTokens = {};
     for (const [hex, label] of Object.entries(tokens).slice(0, MAX_TOKENS))
         cappedTokens[hex] = label;
@@ -6178,6 +6328,8 @@ function generateDetectionData(pkgDir, dsExports) {
         data.tokens = cappedTokens;
     if (classPrefixes.length > 0)
         data.classPrefixes = classPrefixes;
+    if (cssVariables.length > 0)
+        data.cssVariables = cssVariables;
     if (Object.keys(propSignatures).length > 0)
         data.propSignatures = propSignatures;
     if (Object.keys(subComponents).length > 0)
@@ -6194,6 +6346,7 @@ function generateDetectionData(pkgDir, dsExports) {
             subComponents: Object.keys(subComponents).length,
             nameSegments: Object.keys(nameSegments).length,
             classPrefixes: classPrefixes.length,
+            cssVariables: cssVariables.length,
         },
     };
 }
@@ -6201,7 +6354,7 @@ function generateDetectionData(pkgDir, dsExports) {
 
 /***/ }),
 
-/***/ 196:
+/***/ 7196:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -6250,10 +6403,11 @@ exports.countCanonicalUsages = countCanonicalUsages;
 exports.checkInlineDrift = checkInlineDrift;
 exports.checkDriftFull = checkDriftFull;
 exports.analyzeFile = analyzeFile;
-const fs = __importStar(__nccwpck_require__(896));
-const path = __importStar(__nccwpck_require__(928));
-const parser_1 = __nccwpck_require__(429);
-const profiles_1 = __nccwpck_require__(717);
+const fs = __importStar(__nccwpck_require__(9896));
+const path = __importStar(__nccwpck_require__(6928));
+const parser_1 = __nccwpck_require__(5429);
+const profiles_1 = __nccwpck_require__(9717);
+const colors_1 = __nccwpck_require__(6411);
 const BABEL_OPTIONS = {
     plugins: ['typescript', 'jsx'],
     sourceType: 'module',
@@ -6649,7 +6803,7 @@ function countCanonicalUsagesAst(ast, dsExports, canonicalPkgs) {
 // importers; new code should build a DetectionProfile instead.
 exports.CARBON_TOKENS = profiles_1.CARBON_PROFILE.tokens;
 exports.MUI_TOKENS = profiles_1.MUI_PROFILE.tokens;
-const HEX_COLOR_RE = /#[0-9a-fA-F]{6}\b/g;
+const CSS_VAR_USE_RE = /var\(\s*(--[A-Za-z0-9_-]+)/g;
 // ── Phase 4: sub-component usage + name-contains ─────────────────────────────
 /**
  * Merged compatibility views over the built-in profiles (see ./profiles for the
@@ -6677,10 +6831,19 @@ function nodeRange(n) {
 function scanBodyForTokens(bodyText, profile) {
     const tokens = [];
     const classNames = [];
-    for (const m of bodyText.matchAll(HEX_COLOR_RE)) {
-        const hex = m[0].toLowerCase();
-        if (profile.tokens[hex] && !tokens.includes(hex))
-            tokens.push(hex);
+    // Any colour notation is reduced to canonical #rrggbb before the token lookup.
+    for (const color of (0, colors_1.findColors)(bodyText)) {
+        const candidates = color.approximate ? (0, colors_1.hexNeighbours)(color.hex) : [color.hex];
+        const hit = candidates.find((hex) => profile.tokens[hex]);
+        if (hit && !tokens.includes(hit))
+            tokens.push(hit);
+    }
+    if (profile.cssVarPrefixes.length > 0) {
+        for (const m of bodyText.matchAll(CSS_VAR_USE_RE)) {
+            if (profile.cssVarPrefixes.some((prefix) => m[1].startsWith(prefix)) && !tokens.includes(m[1])) {
+                tokens.push(m[1]);
+            }
+        }
     }
     for (const classRe of profile.classPatterns) {
         // matchAll clones the regex, so shared /g patterns carry no lastIndex state
@@ -6921,13 +7084,13 @@ function analyzeFile(fileContent, dsExports, canonicalPkgs, allowlist, filename,
 
 /***/ }),
 
-/***/ 588:
+/***/ 1588:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 
 Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.AzdoPlatform = void 0;
-const git_1 = __nccwpck_require__(160);
+const git_1 = __nccwpck_require__(9160);
 const SOURCE_RE = /\.(ts|tsx|js|jsx)$/;
 const API_VERSION = '7.1-preview.1';
 // Upper bound on threads pages we follow via continuation token, so a misbehaving
@@ -7069,7 +7232,7 @@ exports.AzdoPlatform = AzdoPlatform;
 
 /***/ }),
 
-/***/ 530:
+/***/ 4149:
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -7087,7 +7250,7 @@ function detectPlatform(env = process.env) {
 
 /***/ }),
 
-/***/ 160:
+/***/ 9160:
 /***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 
@@ -7101,7 +7264,7 @@ exports.diffChangedFiles = diffChangedFiles;
  * pipeline checks out the repo; GitHub uses them best-effort for base content).
  * All failures degrade to null/empty so a missing base ref never breaks a run.
  */
-const child_process_1 = __nccwpck_require__(317);
+const child_process_1 = __nccwpck_require__(5317);
 function git(cwd, args) {
     try {
         return (0, child_process_1.execFileSync)('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
@@ -7145,8 +7308,8 @@ function diffChangedFiles(cwd, baseRef) {
 
 /***/ }),
 
-/***/ 717:
-/***/ ((__unused_webpack_module, exports) => {
+/***/ 9717:
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 
 /**
@@ -7156,7 +7319,7 @@ function diffChangedFiles(cwd, baseRef) {
  *
  * A profile is built per run from (1) the built-in data for whichever known design
  * systems appear in `component_library`, and (2) custom data from `.polder.yml`
- * (`tokens`, `class_prefixes`, `prop_signatures`, `sub_components`, `name_segments`).
+ * (`tokens`, `class_prefixes`, `css_variables`, `utility_classes`, `prop_signatures`, `sub_components`, `name_segments`).
  * Built-ins are matched by package so a Carbon repo is never flagged with MUI palette
  * names for coincidental hex values — and a custom DS gets real inline detection
  * instead of silently getting none.
@@ -7168,8 +7331,9 @@ exports.mergeCustomDetection = mergeCustomDetection;
 exports.mergeProfiles = mergeProfiles;
 exports.buildDetectionProfile = buildDetectionProfile;
 exports.allBuiltinProfiles = allBuiltinProfiles;
+const colors_1 = __nccwpck_require__(6411);
 function emptyProfile() {
-    return { tokens: {}, classPatterns: [], propSignatures: {}, subComponentMap: {}, nameSegments: {} };
+    return { tokens: {}, classPatterns: [], cssVarPrefixes: [], propSignatures: {}, subComponentMap: {}, nameSegments: {} };
 }
 /**
  * Merge two CustomDetection layers: `extra` wins per entry (records) and unions
@@ -7182,6 +7346,12 @@ function mergeCustomDetection(base, extra) {
         out.tokens = { ...base.tokens, ...extra.tokens };
     if (base.classPrefixes || extra.classPrefixes) {
         out.classPrefixes = [...new Set([...(base.classPrefixes ?? []), ...(extra.classPrefixes ?? [])])];
+    }
+    if (base.cssVariables || extra.cssVariables) {
+        out.cssVariables = [...new Set([...(base.cssVariables ?? []), ...(extra.cssVariables ?? [])])];
+    }
+    if (base.utilityClasses || extra.utilityClasses) {
+        out.utilityClasses = [...new Set([...(base.utilityClasses ?? []), ...(extra.utilityClasses ?? [])])];
     }
     if (base.propSignatures || extra.propSignatures) {
         out.propSignatures = { ...base.propSignatures, ...extra.propSignatures };
@@ -7270,6 +7440,7 @@ const CARBON_SUBCOMPONENT_MAP = {
 exports.CARBON_PROFILE = {
     tokens: CARBON_TOKENS,
     classPatterns: [/\bcds--[a-z][a-z0-9-]*/g],
+    cssVarPrefixes: [],
     propSignatures: CARBON_PROP_SIGNATURES,
     subComponentMap: CARBON_SUBCOMPONENT_MAP,
     // Conservative: only words distinctive enough to reduce false-positive risk.
@@ -7352,6 +7523,7 @@ const MUI_SUBCOMPONENT_MAP = {
 exports.MUI_PROFILE = {
     tokens: MUI_TOKENS,
     classPatterns: [/\bMui[A-Z][a-zA-Z]+-[a-z][a-zA-Z0-9-]*/g],
+    cssVarPrefixes: [],
     propSignatures: MUI_PROP_SIGNATURES,
     subComponentMap: MUI_SUBCOMPONENT_MAP,
     nameSegments: {
@@ -7381,6 +7553,7 @@ function mergeProfiles(base, extra) {
     return {
         tokens: { ...base.tokens, ...extra.tokens },
         classPatterns: [...base.classPatterns, ...extra.classPatterns],
+        cssVarPrefixes: [...new Set([...base.cssVarPrefixes, ...extra.cssVarPrefixes])],
         propSignatures: { ...base.propSignatures, ...extra.propSignatures },
         subComponentMap: { ...base.subComponentMap, ...extra.subComponentMap },
         nameSegments: { ...base.nameSegments, ...extra.nameSegments },
@@ -7390,6 +7563,16 @@ const REGEX_SPECIALS = /[.*+?^${}()|[\]\\]/g;
 /** A class prefix from config becomes "prefix followed by any class-name tail". */
 function classPrefixToPattern(prefix) {
     return new RegExp(`\\b${prefix.replace(REGEX_SPECIALS, '\\$&')}[a-zA-Z0-9_-]*`, 'g');
+}
+/**
+ * A Tailwind-style utility pattern from config: `*` matches any run of class-name
+ * characters (`bg-brand-*`), and the match must start and end on a class boundary so
+ * `bg-brand-500` also fires under variants (`hover:bg-brand-500`) but not inside
+ * `xbg-brand-500`.
+ */
+function utilityPatternToRegExp(pattern) {
+    const body = pattern.split('*').map((part) => part.replace(REGEX_SPECIALS, '\\$&')).join('[a-zA-Z0-9_-]*');
+    return new RegExp(`(?<![a-zA-Z0-9_-])${body}(?![a-zA-Z0-9_-])`, 'g');
 }
 /**
  * The profile for one run: built-in data for every configured package that matches a
@@ -7404,14 +7587,19 @@ function buildDetectionProfile(canonicalPkgs, custom) {
             profile = mergeProfiles(profile, builtin);
     }
     if (custom) {
-        // Token keys are matched against lowercased hex values, so normalise here rather
-        // than trusting every caller to (config parsing does, direct callers may not).
+        // Token keys are matched against canonical `#rrggbb` values, so normalise here
+        // rather than trusting every caller to (config parsing does, direct callers may not).
         const tokens = {};
-        for (const [hex, label] of Object.entries(custom.tokens ?? {}))
-            tokens[hex.toLowerCase()] = label;
+        for (const [color, label] of Object.entries(custom.tokens ?? {})) {
+            tokens[(0, colors_1.normalizeColor)(color)?.hex ?? color.toLowerCase()] = label;
+        }
         profile = mergeProfiles(profile, {
             tokens,
-            classPatterns: (custom.classPrefixes ?? []).map(classPrefixToPattern),
+            classPatterns: [
+                ...(custom.classPrefixes ?? []).map(classPrefixToPattern),
+                ...(custom.utilityClasses ?? []).map(utilityPatternToRegExp),
+            ],
+            cssVarPrefixes: custom.cssVariables ?? [],
             propSignatures: custom.propSignatures ?? {},
             subComponentMap: custom.subComponents ?? {},
             nameSegments: custom.nameSegments ?? {},
@@ -7430,7 +7618,7 @@ function allBuiltinProfiles() {
 
 /***/ }),
 
-/***/ 190:
+/***/ 9190:
 /***/ (function(__unused_webpack_module, exports, __nccwpck_require__) {
 
 
@@ -7480,11 +7668,11 @@ exports.resolveConfig = resolveConfig;
  * loaded as an UNDERLAY for the custom-detection keys: it fills in what the config
  * doesn't set, and `.polder.yml` entries win on conflict.
  */
-const fs = __importStar(__nccwpck_require__(896));
-const path = __importStar(__nccwpck_require__(928));
-const config_1 = __nccwpck_require__(973);
-const profiles_1 = __nccwpck_require__(717);
-const detect_1 = __nccwpck_require__(52);
+const fs = __importStar(__nccwpck_require__(9896));
+const path = __importStar(__nccwpck_require__(6928));
+const config_1 = __nccwpck_require__(2973);
+const profiles_1 = __nccwpck_require__(9717);
+const detect_1 = __nccwpck_require__(1052);
 exports.PROFILE_FILENAME = '.polder.profile.yml';
 function resolveConfig(cwd, configPath) {
     let content = null;
@@ -7513,6 +7701,8 @@ function resolveConfig(cwd, configPath) {
         const explicit = {
             tokens: c.tokens,
             classPrefixes: c.classPrefixes,
+            cssVariables: c.cssVariables,
+            utilityClasses: c.utilityClasses,
             propSignatures: c.propSignatures,
             subComponents: c.subComponents,
             nameSegments: c.nameSegments,
@@ -7580,15 +7770,15 @@ exports.runCi = runCi;
  * both build a transport and call this. Everything here (config, DS exports,
  * suppression, base/blame readers) is host-independent.
  */
-const fs = __importStar(__nccwpck_require__(896));
-const path = __importStar(__nccwpck_require__(928));
-const resolve_config_1 = __nccwpck_require__(190);
-const parser_1 = __nccwpck_require__(196);
-const profiles_1 = __nccwpck_require__(717);
-const analyze_1 = __nccwpck_require__(701);
+const fs = __importStar(__nccwpck_require__(9896));
+const path = __importStar(__nccwpck_require__(6928));
+const resolve_config_1 = __nccwpck_require__(9190);
+const parser_1 = __nccwpck_require__(7196);
+const profiles_1 = __nccwpck_require__(9717);
+const analyze_1 = __nccwpck_require__(3701);
 const suppress_1 = __nccwpck_require__(10);
-const render_1 = __nccwpck_require__(665);
-const git_1 = __nccwpck_require__(160);
+const render_1 = __nccwpck_require__(5665);
+const git_1 = __nccwpck_require__(9160);
 function resolveDsExports(config, workspace, warn) {
     const dsExports = new Set();
     for (const pkg of config.componentLibrary) {
@@ -7705,35 +7895,35 @@ async function runCi(platform, opts = {}) {
 
 /***/ }),
 
-/***/ 317:
+/***/ 5317:
 /***/ ((module) => {
 
 module.exports = require("child_process");
 
 /***/ }),
 
-/***/ 982:
+/***/ 6982:
 /***/ ((module) => {
 
 module.exports = require("crypto");
 
 /***/ }),
 
-/***/ 896:
+/***/ 9896:
 /***/ ((module) => {
 
 module.exports = require("fs");
 
 /***/ }),
 
-/***/ 928:
+/***/ 6928:
 /***/ ((module) => {
 
 module.exports = require("path");
 
 /***/ }),
 
-/***/ 429:
+/***/ 5429:
 /***/ ((__unused_webpack_module, exports) => {
 
 
@@ -22381,7 +22571,7 @@ exports.tokTypes = tokTypes;
 /******/ 	// startup
 /******/ 	// Load entry module and return exports
 /******/ 	// This entry module is referenced by other modules so it can't be inlined
-/******/ 	var __webpack_exports__ = __nccwpck_require__(581);
+/******/ 	var __webpack_exports__ = __nccwpck_require__(5581);
 /******/ 	module.exports = __webpack_exports__;
 /******/ 	
 /******/ })()

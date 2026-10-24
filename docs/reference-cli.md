@@ -193,7 +193,8 @@ What it derives, and the anti-noise filters applied
 
 | Section | Derived from | Filtered out |
 |---|---|---|
-| `tokens` | Named hex constants (`brandCoral = '#ff3366'`) and CSS custom properties | Pure grays/white/black; test & story files |
+| `tokens` | Named color constants (`brandCoral = '#ff3366'`, `'rgb(…)'`, `'hsl(…)'`) and CSS custom properties with color values, in source and `.css`/`.scss`/`.less` files | Pure grays/white/black; test & story files |
+| `css_variables` | Custom property namespaces the DS defines (`--acme-…`) | Namespaces with fewer than 3 properties; framework and generic ones (`--tw-`, `--radix-`, `--color-`, `--space-`…) |
 | `class_prefixes` | Repeated BEM-style literals (`acme--…`) | Prefixes seen fewer than 3 times |
 | `prop_signatures` | Component prop types (`XProps` interfaces, destructured params, `React.FC<XProps>`) | Ubiquitous props (`children`, `className`…); components with <2 distinctive props |
 | `sub_components` | Compound export naming (`CardHeader` → `Card`) | Suffixes outside a part vocabulary (`ButtonGroup` is not a part of `Button`) |
