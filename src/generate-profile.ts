@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { parse, type ParserOptions } from '@babel/parser';
 import type { CustomDetection } from './profiles';
+import { normalizeColor } from './colors';
 
 const BABEL_OPTIONS: ParserOptions = {
   plugins: ['typescript', 'jsx'],
@@ -65,7 +66,8 @@ const SKIP_DIRS = new Set([
   'node_modules', '.git', 'dist', 'build', 'out', 'coverage',
   '__tests__', '__mocks__', '__snapshots__', 'storybook-static',
 ]);
-const SOURCE_FILE_RE = /\.(ts|tsx|js|jsx)$/;
+const SOURCE_FILE_RE = /\.(ts|tsx|js|jsx|css|scss|less)$/;
+const STYLE_FILE_RE = /\.(css|scss|less)$/;
 const NON_COMPONENT_FILE_RE = /\.(test|spec|stories)\.|\.stories\./;
 
 // ── File collection ───────────────────────────────────────────────────────────
@@ -196,12 +198,20 @@ export function extractFileFacts(content: string): FileFacts {
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
 
-// Named hex assignments: `coral: '#ff3366'`, `export const brandRed = "#da1e28"`,
-// and CSS custom properties in template CSS: `--brand-coral: #ff3366`.
-const NAMED_HEX_RE = /([A-Za-z_$][A-Za-z0-9_$]*)\s*[:=]\s*['"]#([0-9a-fA-F]{6})['"]/g;
-const CSS_VAR_HEX_RE = /(--[a-z][a-z0-9-]*)\s*:\s*#([0-9a-fA-F]{6})\b/g;
+// Named colour assignments: `coral: '#ff3366'`, `export const brandRed = "rgb(218, 30, 40)"`.
+const NAMED_COLOR_RE = /([A-Za-z_$][A-Za-z0-9_$]*)\s*[:=]\s*['"]([^'"\n]{3,60})['"]/g;
+// CSS custom property definitions, in .css files or template CSS: `--brand-coral: #ff3366`.
+const CSS_VAR_DEF_RE = /(--[a-z][a-z0-9-]*)\s*:\s*([^;}\n'"`]+)/g;
 // BEM-ish DS class prefixes: the `acme` of `acme--button` in a string literal.
 const CLASS_PREFIX_RE = /['"`]([a-z][a-z0-9]*(?:-[a-z0-9]+)*)--[a-z]/g;
+
+// First segments of custom property names that belong to a framework or are generic
+// vocabulary, never a distinctive DS namespace (`--tw-ring`, `--color-primary`).
+const GENERIC_VAR_NAMESPACES = new Set([
+  'tw', 'radix', 'webkit', 'moz', 'ms', 'color', 'colors', 'spacing', 'space', 'font', 'size',
+  'text', 'bg', 'border', 'radius', 'shadow', 'z', 'gap', 'width', 'height', 'line', 'letter',
+]);
+const CSS_VAR_NAMESPACE_MIN_NAMES = 3;
 
 function isLowSpecificityHex(hex: string): boolean {
   // Pure grays (incl. #ffffff/#000000) show up in any codebase — never tokens.
@@ -221,6 +231,7 @@ export interface GeneratedProfile {
     subComponents: number;
     nameSegments: number;
     classPrefixes: number;
+    cssVariables: number;
   };
 }
 
@@ -253,6 +264,7 @@ export function generateDetectionData(pkgDir: string, dsExports: Set<string>): G
   const components = new Map<string, { destructured: string[]; propsTypeName?: string }>();
   const tokens: Record<string, string> = {};
   const prefixCounts = new Map<string, number>();
+  const varNamesByNamespace = new Map<string, Set<string>>();
 
   for (const file of files) {
     let content: string;
@@ -262,17 +274,29 @@ export function generateDetectionData(pkgDir: string, dsExports: Set<string>): G
       continue;
     }
 
-    const facts = extractFileFacts(content);
-    for (const [k, v] of facts.typeMembers) if (!typeMembers.has(k)) typeMembers.set(k, v);
-    for (const [k, v] of facts.components) if (!components.has(k)) components.set(k, v);
+    if (!STYLE_FILE_RE.test(file)) {
+      const facts = extractFileFacts(content);
+      for (const [k, v] of facts.typeMembers) if (!typeMembers.has(k)) typeMembers.set(k, v);
+      for (const [k, v] of facts.components) if (!components.has(k)) components.set(k, v);
 
-    for (const m of content.matchAll(NAMED_HEX_RE)) {
-      const hex = `#${m[2].toLowerCase()}`;
-      if (!isLowSpecificityHex(hex) && tokens[hex] === undefined) tokens[hex] = m[1];
+      for (const m of content.matchAll(NAMED_COLOR_RE)) {
+        const color = normalizeColor(m[2]);
+        if (color && !isLowSpecificityHex(color.hex) && tokens[color.hex] === undefined) {
+          tokens[color.hex] = m[1];
+        }
+      }
     }
-    for (const m of content.matchAll(CSS_VAR_HEX_RE)) {
-      const hex = `#${m[2].toLowerCase()}`;
-      if (!isLowSpecificityHex(hex) && tokens[hex] === undefined) tokens[hex] = m[1];
+    for (const m of content.matchAll(CSS_VAR_DEF_RE)) {
+      const color = normalizeColor(m[2]);
+      if (color && !isLowSpecificityHex(color.hex) && tokens[color.hex] === undefined) {
+        tokens[color.hex] = m[1];
+      }
+      const namespace = /^--([a-z][a-z0-9]*)-[a-z0-9]/.exec(m[1])?.[1];
+      if (namespace && !GENERIC_VAR_NAMESPACES.has(namespace)) {
+        const names = varNamesByNamespace.get(namespace) ?? new Set<string>();
+        names.add(m[1]);
+        varNamesByNamespace.set(namespace, names);
+      }
     }
     for (const m of content.matchAll(CLASS_PREFIX_RE)) {
       prefixCounts.set(m[1], (prefixCounts.get(m[1]) ?? 0) + 1);
@@ -324,12 +348,18 @@ export function generateDetectionData(pkgDir: string, dsExports: Set<string>): G
     .map(([prefix]) => `${prefix}--`)
     .sort();
 
+  const cssVariables = [...varNamesByNamespace.entries()]
+    .filter(([, names]) => names.size >= CSS_VAR_NAMESPACE_MIN_NAMES)
+    .map(([namespace]) => `--${namespace}-`)
+    .sort();
+
   const cappedTokens: Record<string, string> = {};
   for (const [hex, label] of Object.entries(tokens).slice(0, MAX_TOKENS)) cappedTokens[hex] = label;
 
   const data: CustomDetection = {};
   if (Object.keys(cappedTokens).length > 0) data.tokens = cappedTokens;
   if (classPrefixes.length > 0) data.classPrefixes = classPrefixes;
+  if (cssVariables.length > 0) data.cssVariables = cssVariables;
   if (Object.keys(propSignatures).length > 0) data.propSignatures = propSignatures;
   if (Object.keys(subComponents).length > 0) data.subComponents = subComponents;
   if (Object.keys(nameSegments).length > 0) data.nameSegments = nameSegments;
@@ -344,6 +374,7 @@ export function generateDetectionData(pkgDir: string, dsExports: Set<string>): G
       subComponents: Object.keys(subComponents).length,
       nameSegments: Object.keys(nameSegments).length,
       classPrefixes: classPrefixes.length,
+      cssVariables: cssVariables.length,
     },
   };
 }

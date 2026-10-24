@@ -34019,6 +34019,117 @@ function wrappy (fn, cb) {
 
 /***/ }),
 
+/***/ 6411:
+/***/ ((__unused_webpack_module, exports) => {
+
+"use strict";
+
+/**
+ * Colour normalisation for token fingerprinting. Every colour notation in source
+ * (3/4/6/8-digit hex, rgb()/rgba(), hsl()/hsla()) is reduced to the canonical
+ * lowercase `#rrggbb` the profile's token map is keyed on, with alpha dropped, so one
+ * token map matches however the value was written. Only values that land in the
+ * profile fire, so the low-false-positive stance is unchanged.
+ */
+Object.defineProperty(exports, "__esModule", ({ value: true }));
+exports.normalizeColor = normalizeColor;
+exports.findColors = findColors;
+exports.hexNeighbours = hexNeighbours;
+const HEX_RE = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/gi;
+// Whole-notation scanners. The trailing lookahead keeps `#0f62fe80x` / `#12345` from
+// matching as a shorter colour.
+const SCAN_RE = /#[0-9a-fA-F]{3,8}(?![0-9a-zA-Z_-])|\b(?:rgba?|hsla?)\(\s*[^()]*\)/g;
+const toHex2 = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+function channel(raw) {
+    const m = /^(\d*\.?\d+)(%?)$/.exec(raw);
+    if (!m)
+        return null;
+    const v = parseFloat(m[1]);
+    return m[2] ? (v / 100) * 255 : v;
+}
+function parseRgb(args) {
+    // Legacy `r, g, b[, a]` and modern `r g b [/ a]` both split on commas/spaces/slash.
+    const parts = args.split(/[\s,/]+/).filter(Boolean);
+    if (parts.length < 3 || parts.length > 4)
+        return null;
+    const rgb = parts.slice(0, 3).map(channel);
+    if (rgb.some((c) => c === null))
+        return null;
+    return `#${rgb.map((c) => toHex2(c)).join('')}`;
+}
+function parseHsl(args) {
+    const parts = args.split(/[\s,/]+/).filter(Boolean);
+    if (parts.length < 3 || parts.length > 4)
+        return null;
+    const hm = /^(-?\d*\.?\d+)(deg)?$/.exec(parts[0]);
+    const sm = /^(\d*\.?\d+)%$/.exec(parts[1]);
+    const lm = /^(\d*\.?\d+)%$/.exec(parts[2]);
+    if (!hm || !sm || !lm)
+        return null;
+    const h = (((parseFloat(hm[1]) % 360) + 360) % 360) / 360;
+    const s = Math.min(1, parseFloat(sm[1]) / 100);
+    const l = Math.min(1, parseFloat(lm[1]) / 100);
+    const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+    const p = 2 * l - q;
+    const hue = (t) => {
+        const x = (t + 1) % 1;
+        if (x < 1 / 6)
+            return p + (q - p) * 6 * x;
+        if (x < 1 / 2)
+            return q;
+        if (x < 2 / 3)
+            return p + (q - p) * (2 / 3 - x) * 6;
+        return p;
+    };
+    return `#${[hue(h + 1 / 3), hue(h), hue(h - 1 / 3)].map((c) => toHex2(c * 255)).join('')}`;
+}
+/** Canonical `#rrggbb` for one complete colour notation, or null if it isn't one. */
+function normalizeColor(raw) {
+    const value = raw.trim();
+    const hexMatch = [...value.matchAll(HEX_RE)][0];
+    if (hexMatch) {
+        let digits = hexMatch[1].toLowerCase();
+        if (digits.length <= 4)
+            digits = [...digits].map((c) => c + c).join('');
+        return { hex: `#${digits.slice(0, 6)}`, approximate: false };
+    }
+    const fn = [...value.matchAll(/^(rgba?|hsla?)\(\s*([^()]*)\)$/gi)][0];
+    if (!fn)
+        return null;
+    const isHsl = fn[1].toLowerCase().startsWith('hsl');
+    const hex = isHsl ? parseHsl(fn[2]) : parseRgb(fn[2]);
+    return hex ? { hex, approximate: isHsl } : null;
+}
+/** Every colour written in `text`, normalised, in order of appearance. */
+function findColors(text) {
+    const out = [];
+    for (const m of text.matchAll(SCAN_RE)) {
+        const color = normalizeColor(m[0]);
+        if (color)
+            out.push(color);
+    }
+    return out;
+}
+// Integer-percent hsl() (what people write by hand) can drift up to 2 per channel from
+// the hex it was derived from.
+const HSL_TOLERANCE = [0, -1, 1, -2, 2];
+/** The canonical hex plus its near neighbours, for approximate (hsl) lookups. */
+function hexNeighbours(hex) {
+    const base = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16));
+    const out = [];
+    for (const dr of HSL_TOLERANCE) {
+        for (const dg of HSL_TOLERANCE) {
+            for (const db of HSL_TOLERANCE) {
+                out.push(`#${[base[0] + dr, base[1] + dg, base[2] + db].map(toHex2).join('')}`);
+            }
+        }
+    }
+    return out;
+}
+
+
+/***/ }),
+
 /***/ 4981:
 /***/ ((__unused_webpack_module, exports) => {
 
@@ -34511,7 +34622,7 @@ exports.parseConfig = parseConfig;
 exports.parseProfileFile = parseProfileFile;
 exports.readConfig = readConfig;
 const yaml = __importStar(__nccwpck_require__(4281));
-const HEX_RE = /^#[0-9a-f]{6}$/;
+const colors_1 = __nccwpck_require__(6411);
 function requireStringMap(value, key) {
     if (typeof value !== 'object' || value === null || Array.isArray(value)) {
         throw new Error(`${key} must be a mapping of strings to strings`);
@@ -34576,17 +34687,17 @@ function parseConfig(raw) {
     Object.assign(config, readCustomKeys(cfg));
     return config;
 }
-/** Parse + validate the five custom-detection keys from a raw YAML object. */
+/** Parse + validate the custom-detection keys from a raw YAML object. */
 function readCustomKeys(cfg) {
     const out = {};
     if (cfg.tokens !== undefined) {
         const tokens = {};
         for (const [k, v] of Object.entries(requireStringMap(cfg.tokens, 'tokens'))) {
-            const hex = k.toLowerCase();
-            if (!HEX_RE.test(hex)) {
-                throw new Error(`tokens keys must be 6-digit hex colors like "#0f62fe" (got "${k}")`);
+            const color = (0, colors_1.normalizeColor)(k);
+            if (!color) {
+                throw new Error(`tokens keys must be colors like "#0f62fe", "#fff", "rgb(15, 98, 254)" or "hsl(219, 99%, 53%)" (got "${k}")`);
             }
-            tokens[hex] = v;
+            tokens[color.hex] = v;
         }
         out.tokens = tokens;
     }
@@ -34595,6 +34706,19 @@ function readCustomKeys(cfg) {
             throw new Error('class_prefixes must be an array of non-empty strings');
         }
         out.classPrefixes = cfg.class_prefixes;
+    }
+    if (cfg.css_variables !== undefined) {
+        if (!Array.isArray(cfg.css_variables) ||
+            !cfg.css_variables.every((x) => typeof x === 'string' && x.startsWith('--') && x.length > 2)) {
+            throw new Error('css_variables must be an array of custom property names or prefixes like "--ds-color-"');
+        }
+        out.cssVariables = cfg.css_variables;
+    }
+    if (cfg.utility_classes !== undefined) {
+        if (!Array.isArray(cfg.utility_classes) || !cfg.utility_classes.every((x) => typeof x === 'string' && x.length > 0)) {
+            throw new Error('utility_classes must be an array of non-empty class patterns like "bg-brand-*"');
+        }
+        out.utilityClasses = cfg.utility_classes;
     }
     if (cfg.prop_signatures !== undefined) {
         if (typeof cfg.prop_signatures !== 'object' || cfg.prop_signatures === null || Array.isArray(cfg.prop_signatures)) {
@@ -34623,7 +34747,7 @@ function readCustomKeys(cfg) {
 }
 /**
  * Parse a generated `.polder.profile.yml` (written by `polder-drift profile`).
- * Accepts only the five custom-detection keys, validated exactly like `.polder.yml`;
+ * Accepts only the custom-detection keys, validated exactly like `.polder.yml`;
  * unknown keys are ignored so the file can carry generator metadata.
  */
 function parseProfileFile(raw) {
@@ -34861,6 +34985,7 @@ const fs = __importStar(__nccwpck_require__(9896));
 const path = __importStar(__nccwpck_require__(6928));
 const parser_1 = __nccwpck_require__(5429);
 const profiles_1 = __nccwpck_require__(9717);
+const colors_1 = __nccwpck_require__(6411);
 const BABEL_OPTIONS = {
     plugins: ['typescript', 'jsx'],
     sourceType: 'module',
@@ -35256,7 +35381,7 @@ function countCanonicalUsagesAst(ast, dsExports, canonicalPkgs) {
 // importers; new code should build a DetectionProfile instead.
 exports.CARBON_TOKENS = profiles_1.CARBON_PROFILE.tokens;
 exports.MUI_TOKENS = profiles_1.MUI_PROFILE.tokens;
-const HEX_COLOR_RE = /#[0-9a-fA-F]{6}\b/g;
+const CSS_VAR_USE_RE = /var\(\s*(--[A-Za-z0-9_-]+)/g;
 // ── Phase 4: sub-component usage + name-contains ─────────────────────────────
 /**
  * Merged compatibility views over the built-in profiles (see ./profiles for the
@@ -35284,10 +35409,19 @@ function nodeRange(n) {
 function scanBodyForTokens(bodyText, profile) {
     const tokens = [];
     const classNames = [];
-    for (const m of bodyText.matchAll(HEX_COLOR_RE)) {
-        const hex = m[0].toLowerCase();
-        if (profile.tokens[hex] && !tokens.includes(hex))
-            tokens.push(hex);
+    // Any colour notation is reduced to canonical #rrggbb before the token lookup.
+    for (const color of (0, colors_1.findColors)(bodyText)) {
+        const candidates = color.approximate ? (0, colors_1.hexNeighbours)(color.hex) : [color.hex];
+        const hit = candidates.find((hex) => profile.tokens[hex]);
+        if (hit && !tokens.includes(hit))
+            tokens.push(hit);
+    }
+    if (profile.cssVarPrefixes.length > 0) {
+        for (const m of bodyText.matchAll(CSS_VAR_USE_RE)) {
+            if (profile.cssVarPrefixes.some((prefix) => m[1].startsWith(prefix)) && !tokens.includes(m[1])) {
+                tokens.push(m[1]);
+            }
+        }
     }
     for (const classRe of profile.classPatterns) {
         // matchAll clones the regex, so shared /g patterns carry no lastIndex state
@@ -35773,7 +35907,7 @@ exports.GitHubPlatform = GitHubPlatform;
 /***/ }),
 
 /***/ 9717:
-/***/ ((__unused_webpack_module, exports) => {
+/***/ ((__unused_webpack_module, exports, __nccwpck_require__) => {
 
 "use strict";
 
@@ -35784,7 +35918,7 @@ exports.GitHubPlatform = GitHubPlatform;
  *
  * A profile is built per run from (1) the built-in data for whichever known design
  * systems appear in `component_library`, and (2) custom data from `.polder.yml`
- * (`tokens`, `class_prefixes`, `prop_signatures`, `sub_components`, `name_segments`).
+ * (`tokens`, `class_prefixes`, `css_variables`, `utility_classes`, `prop_signatures`, `sub_components`, `name_segments`).
  * Built-ins are matched by package so a Carbon repo is never flagged with MUI palette
  * names for coincidental hex values — and a custom DS gets real inline detection
  * instead of silently getting none.
@@ -35796,8 +35930,9 @@ exports.mergeCustomDetection = mergeCustomDetection;
 exports.mergeProfiles = mergeProfiles;
 exports.buildDetectionProfile = buildDetectionProfile;
 exports.allBuiltinProfiles = allBuiltinProfiles;
+const colors_1 = __nccwpck_require__(6411);
 function emptyProfile() {
-    return { tokens: {}, classPatterns: [], propSignatures: {}, subComponentMap: {}, nameSegments: {} };
+    return { tokens: {}, classPatterns: [], cssVarPrefixes: [], propSignatures: {}, subComponentMap: {}, nameSegments: {} };
 }
 /**
  * Merge two CustomDetection layers: `extra` wins per entry (records) and unions
@@ -35810,6 +35945,12 @@ function mergeCustomDetection(base, extra) {
         out.tokens = { ...base.tokens, ...extra.tokens };
     if (base.classPrefixes || extra.classPrefixes) {
         out.classPrefixes = [...new Set([...(base.classPrefixes ?? []), ...(extra.classPrefixes ?? [])])];
+    }
+    if (base.cssVariables || extra.cssVariables) {
+        out.cssVariables = [...new Set([...(base.cssVariables ?? []), ...(extra.cssVariables ?? [])])];
+    }
+    if (base.utilityClasses || extra.utilityClasses) {
+        out.utilityClasses = [...new Set([...(base.utilityClasses ?? []), ...(extra.utilityClasses ?? [])])];
     }
     if (base.propSignatures || extra.propSignatures) {
         out.propSignatures = { ...base.propSignatures, ...extra.propSignatures };
@@ -35898,6 +36039,7 @@ const CARBON_SUBCOMPONENT_MAP = {
 exports.CARBON_PROFILE = {
     tokens: CARBON_TOKENS,
     classPatterns: [/\bcds--[a-z][a-z0-9-]*/g],
+    cssVarPrefixes: [],
     propSignatures: CARBON_PROP_SIGNATURES,
     subComponentMap: CARBON_SUBCOMPONENT_MAP,
     // Conservative: only words distinctive enough to reduce false-positive risk.
@@ -35980,6 +36122,7 @@ const MUI_SUBCOMPONENT_MAP = {
 exports.MUI_PROFILE = {
     tokens: MUI_TOKENS,
     classPatterns: [/\bMui[A-Z][a-zA-Z]+-[a-z][a-zA-Z0-9-]*/g],
+    cssVarPrefixes: [],
     propSignatures: MUI_PROP_SIGNATURES,
     subComponentMap: MUI_SUBCOMPONENT_MAP,
     nameSegments: {
@@ -36009,6 +36152,7 @@ function mergeProfiles(base, extra) {
     return {
         tokens: { ...base.tokens, ...extra.tokens },
         classPatterns: [...base.classPatterns, ...extra.classPatterns],
+        cssVarPrefixes: [...new Set([...base.cssVarPrefixes, ...extra.cssVarPrefixes])],
         propSignatures: { ...base.propSignatures, ...extra.propSignatures },
         subComponentMap: { ...base.subComponentMap, ...extra.subComponentMap },
         nameSegments: { ...base.nameSegments, ...extra.nameSegments },
@@ -36018,6 +36162,16 @@ const REGEX_SPECIALS = /[.*+?^${}()|[\]\\]/g;
 /** A class prefix from config becomes "prefix followed by any class-name tail". */
 function classPrefixToPattern(prefix) {
     return new RegExp(`\\b${prefix.replace(REGEX_SPECIALS, '\\$&')}[a-zA-Z0-9_-]*`, 'g');
+}
+/**
+ * A Tailwind-style utility pattern from config: `*` matches any run of class-name
+ * characters (`bg-brand-*`), and the match must start and end on a class boundary so
+ * `bg-brand-500` also fires under variants (`hover:bg-brand-500`) but not inside
+ * `xbg-brand-500`.
+ */
+function utilityPatternToRegExp(pattern) {
+    const body = pattern.split('*').map((part) => part.replace(REGEX_SPECIALS, '\\$&')).join('[a-zA-Z0-9_-]*');
+    return new RegExp(`(?<![a-zA-Z0-9_-])${body}(?![a-zA-Z0-9_-])`, 'g');
 }
 /**
  * The profile for one run: built-in data for every configured package that matches a
@@ -36032,14 +36186,19 @@ function buildDetectionProfile(canonicalPkgs, custom) {
             profile = mergeProfiles(profile, builtin);
     }
     if (custom) {
-        // Token keys are matched against lowercased hex values, so normalise here rather
-        // than trusting every caller to (config parsing does, direct callers may not).
+        // Token keys are matched against canonical `#rrggbb` values, so normalise here
+        // rather than trusting every caller to (config parsing does, direct callers may not).
         const tokens = {};
-        for (const [hex, label] of Object.entries(custom.tokens ?? {}))
-            tokens[hex.toLowerCase()] = label;
+        for (const [color, label] of Object.entries(custom.tokens ?? {})) {
+            tokens[(0, colors_1.normalizeColor)(color)?.hex ?? color.toLowerCase()] = label;
+        }
         profile = mergeProfiles(profile, {
             tokens,
-            classPatterns: (custom.classPrefixes ?? []).map(classPrefixToPattern),
+            classPatterns: [
+                ...(custom.classPrefixes ?? []).map(classPrefixToPattern),
+                ...(custom.utilityClasses ?? []).map(utilityPatternToRegExp),
+            ],
+            cssVarPrefixes: custom.cssVariables ?? [],
             propSignatures: custom.propSignatures ?? {},
             subComponentMap: custom.subComponents ?? {},
             nameSegments: custom.nameSegments ?? {},
@@ -36142,6 +36301,8 @@ function resolveConfig(cwd, configPath) {
         const explicit = {
             tokens: c.tokens,
             classPrefixes: c.classPrefixes,
+            cssVariables: c.cssVariables,
+            utilityClasses: c.utilityClasses,
             propSignatures: c.propSignatures,
             subComponents: c.subComponents,
             nameSegments: c.nameSegments,

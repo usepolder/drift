@@ -19,8 +19,10 @@ library_paths: {}                               # package → local dir (e.g. a 
 
 # Custom detection data (all optional) — powers the inline rules for design
 # systems without built-in profiles. See "Detection profiles" below.
-tokens: {}            # hex value → token label
+tokens: {}            # color value (hex, rgb(), hsl()) → token label
 class_prefixes: []    # DS class-name prefixes
+css_variables: []     # DS CSS custom property names/prefixes
+utility_classes: []   # Tailwind-style class patterns (bg-brand-*)
 prop_signatures: {}   # DS component → distinctive prop names
 sub_components: {}    # sub-component element → DS parent
 name_segments: {}     # PascalCase word → DS parent
@@ -148,15 +150,47 @@ profile.
 
 ### `tokens` (optional)
 
-Hardcoded design-token values: a mapping of 6-digit hex colors to token labels. A
-component whose body contains one of these values trips
-[token-fingerprint](reference-detection-rules.md). Keys are case-insensitive;
-anything but `#rrggbb` is a config error.
+Hardcoded design-token values: a mapping of colors to token labels. A component
+whose body contains one of these values trips
+[token-fingerprint](reference-detection-rules.md). Keys may be written as `#rgb`,
+`#rrggbb`, `#rrggbbaa`, `rgb()`/`rgba()` or `hsl()`/`hsla()`; they are normalised to
+`#rrggbb` (alpha dropped), and source values are normalised the same way before
+lookup, so `#FF3366`, `#f36`, `#ff336680` and `rgb(255 51 102 / 50%)` all match one
+entry. Integer `hsl()` values match within 2 per channel of the token (hand-written
+`hsl()` rarely round-trips exactly). Anything else is a config error.
 
 ```yaml
 tokens:
   "#ff3366": "brand/coral"
   "#0a1f44": "brand/navy"
+```
+
+A value inside a Tailwind arbitrary class (`bg-[#ff3366]`) is a colour like any other
+and matches too.
+
+### `css_variables` (optional)
+
+CSS custom property names, or prefixes, owned by your design system. A component
+body that reads one with `var(--…)` (with or without a fallback) trips
+token-fingerprint. Entries must start with `--`. Matching is by prefix, so
+`--acme-` covers `--acme-color-brand` and `--acme-space-md`.
+
+```yaml
+css_variables:
+  - "--acme-"
+```
+
+### `utility_classes` (optional)
+
+Tailwind-style utility patterns that only your design system's theme defines. `*`
+matches any run of class-name characters; matches start and end on a class boundary,
+so `bg-brand-*` fires on `hover:bg-brand-500` but not on `xbg-brand-500`. Like
+`class_prefixes`, a hit trips token-fingerprint.
+
+```yaml
+utility_classes:
+  - "bg-brand-*"
+  - "text-brand-*"
 ```
 
 ### `class_prefixes` (optional)

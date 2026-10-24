@@ -5,17 +5,21 @@
  *
  * A profile is built per run from (1) the built-in data for whichever known design
  * systems appear in `component_library`, and (2) custom data from `.polder.yml`
- * (`tokens`, `class_prefixes`, `prop_signatures`, `sub_components`, `name_segments`).
+ * (`tokens`, `class_prefixes`, `css_variables`, `utility_classes`, `prop_signatures`, `sub_components`, `name_segments`).
  * Built-ins are matched by package so a Carbon repo is never flagged with MUI palette
  * names for coincidental hex values — and a custom DS gets real inline detection
  * instead of silently getting none.
  */
+
+import { normalizeColor } from './colors';
 
 export interface DetectionProfile {
   /** Hardcoded design-token values: lowercase `#rrggbb` hex → token label. */
   tokens: Record<string, string>;
   /** Patterns matching DS-specific CSS class names (e.g. `cds--*`, `Mui*-*`). */
   classPatterns: RegExp[];
+  /** DS CSS custom property names or prefixes (`--ds-color-`) matched in `var(--…)`. */
+  cssVarPrefixes: string[];
   /** DS component name → distinctive prop names (see PROP_MATCH_* thresholds). */
   propSignatures: Record<string, string[]>;
   /** Sub-component JSX element name → canonical DS parent component. */
@@ -28,13 +32,15 @@ export interface DetectionProfile {
 export interface CustomDetection {
   tokens?: Record<string, string>;
   classPrefixes?: string[];
+  cssVariables?: string[];
+  utilityClasses?: string[];
   propSignatures?: Record<string, string[]>;
   subComponents?: Record<string, string>;
   nameSegments?: Record<string, string>;
 }
 
 export function emptyProfile(): DetectionProfile {
-  return { tokens: {}, classPatterns: [], propSignatures: {}, subComponentMap: {}, nameSegments: {} };
+  return { tokens: {}, classPatterns: [], cssVarPrefixes: [], propSignatures: {}, subComponentMap: {}, nameSegments: {} };
 }
 
 /**
@@ -47,6 +53,12 @@ export function mergeCustomDetection(base: CustomDetection, extra: CustomDetecti
   if (base.tokens || extra.tokens) out.tokens = { ...base.tokens, ...extra.tokens };
   if (base.classPrefixes || extra.classPrefixes) {
     out.classPrefixes = [...new Set([...(base.classPrefixes ?? []), ...(extra.classPrefixes ?? [])])];
+  }
+  if (base.cssVariables || extra.cssVariables) {
+    out.cssVariables = [...new Set([...(base.cssVariables ?? []), ...(extra.cssVariables ?? [])])];
+  }
+  if (base.utilityClasses || extra.utilityClasses) {
+    out.utilityClasses = [...new Set([...(base.utilityClasses ?? []), ...(extra.utilityClasses ?? [])])];
   }
   if (base.propSignatures || extra.propSignatures) {
     out.propSignatures = { ...base.propSignatures, ...extra.propSignatures };
@@ -140,6 +152,7 @@ const CARBON_SUBCOMPONENT_MAP: Record<string, string> = {
 export const CARBON_PROFILE: DetectionProfile = {
   tokens: CARBON_TOKENS,
   classPatterns: [/\bcds--[a-z][a-z0-9-]*/g],
+  cssVarPrefixes: [],
   propSignatures: CARBON_PROP_SIGNATURES,
   subComponentMap: CARBON_SUBCOMPONENT_MAP,
   // Conservative: only words distinctive enough to reduce false-positive risk.
@@ -227,6 +240,7 @@ const MUI_SUBCOMPONENT_MAP: Record<string, string> = {
 export const MUI_PROFILE: DetectionProfile = {
   tokens: MUI_TOKENS,
   classPatterns: [/\bMui[A-Z][a-zA-Z]+-[a-z][a-zA-Z0-9-]*/g],
+  cssVarPrefixes: [],
   propSignatures: MUI_PROP_SIGNATURES,
   subComponentMap: MUI_SUBCOMPONENT_MAP,
   nameSegments: {
@@ -259,6 +273,7 @@ export function mergeProfiles(base: DetectionProfile, extra: DetectionProfile): 
   return {
     tokens: { ...base.tokens, ...extra.tokens },
     classPatterns: [...base.classPatterns, ...extra.classPatterns],
+    cssVarPrefixes: [...new Set([...base.cssVarPrefixes, ...extra.cssVarPrefixes])],
     propSignatures: { ...base.propSignatures, ...extra.propSignatures },
     subComponentMap: { ...base.subComponentMap, ...extra.subComponentMap },
     nameSegments: { ...base.nameSegments, ...extra.nameSegments },
@@ -270,6 +285,17 @@ const REGEX_SPECIALS = /[.*+?^${}()|[\]\\]/g;
 /** A class prefix from config becomes "prefix followed by any class-name tail". */
 function classPrefixToPattern(prefix: string): RegExp {
   return new RegExp(`\\b${prefix.replace(REGEX_SPECIALS, '\\$&')}[a-zA-Z0-9_-]*`, 'g');
+}
+
+/**
+ * A Tailwind-style utility pattern from config: `*` matches any run of class-name
+ * characters (`bg-brand-*`), and the match must start and end on a class boundary so
+ * `bg-brand-500` also fires under variants (`hover:bg-brand-500`) but not inside
+ * `xbg-brand-500`.
+ */
+function utilityPatternToRegExp(pattern: string): RegExp {
+  const body = pattern.split('*').map((part) => part.replace(REGEX_SPECIALS, '\\$&')).join('[a-zA-Z0-9_-]*');
+  return new RegExp(`(?<![a-zA-Z0-9_-])${body}(?![a-zA-Z0-9_-])`, 'g');
 }
 
 /**
@@ -287,13 +313,19 @@ export function buildDetectionProfile(
     if (canonicalPkgs.some(matches)) profile = mergeProfiles(profile, builtin);
   }
   if (custom) {
-    // Token keys are matched against lowercased hex values, so normalise here rather
-    // than trusting every caller to (config parsing does, direct callers may not).
+    // Token keys are matched against canonical `#rrggbb` values, so normalise here
+    // rather than trusting every caller to (config parsing does, direct callers may not).
     const tokens: Record<string, string> = {};
-    for (const [hex, label] of Object.entries(custom.tokens ?? {})) tokens[hex.toLowerCase()] = label;
+    for (const [color, label] of Object.entries(custom.tokens ?? {})) {
+      tokens[normalizeColor(color)?.hex ?? color.toLowerCase()] = label;
+    }
     profile = mergeProfiles(profile, {
       tokens,
-      classPatterns: (custom.classPrefixes ?? []).map(classPrefixToPattern),
+      classPatterns: [
+        ...(custom.classPrefixes ?? []).map(classPrefixToPattern),
+        ...(custom.utilityClasses ?? []).map(utilityPatternToRegExp),
+      ],
+      cssVarPrefixes: custom.cssVariables ?? [],
       propSignatures: custom.propSignatures ?? {},
       subComponentMap: custom.subComponents ?? {},
       nameSegments: custom.nameSegments ?? {},

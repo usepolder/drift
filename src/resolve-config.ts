@@ -47,6 +47,8 @@ export function resolveConfig(cwd: string, configPath: string): ResolvedConfig |
     const explicit: CustomDetection = {
       tokens: c.tokens,
       classPrefixes: c.classPrefixes,
+      cssVariables: c.cssVariables,
+      utilityClasses: c.utilityClasses,
       propSignatures: c.propSignatures,
       subComponents: c.subComponents,
       nameSegments: c.nameSegments,

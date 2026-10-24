@@ -57,7 +57,7 @@ If a package can't be resolved anywhere, it falls back to a PascalCase heuristic
 The heuristic look-alike rules (token fingerprints, prop matches, sub-components) run
 off a per-DS detection profile: built-ins ship for Carbon (`@carbon/*`) and MUI
 (`@mui/*`), and any design system can supply its own via the optional `tokens`,
-`class_prefixes`, `prop_signatures`, `sub_components`, and `name_segments` config keys —
+`class_prefixes`, `css_variables`, `utility_classes`, `prop_signatures`, `sub_components`, and `name_segments` config keys —
 see [Configuration](docs/reference-configuration.md#detection-profiles). Or generate
 that data straight from your design system's source:
 

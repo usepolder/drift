@@ -90,16 +90,20 @@ local-shadow is **not** emitted — the engine has no export list to compare aga
 
 ## 3. Token fingerprint (`token-fingerprint`, medium)
 
-A component body that hardcodes a **design-token hex value** or a **DS CSS class name**
+A component body that hardcodes a **design-token colour**, reads a **DS CSS variable**, or uses a **DS CSS class name**
 — a strong sign the component reimplements DS styling by hand.
 
 **Triggers when** a component's function body contains either:
 
-- a 6-digit hex color listed in the run's [detection profile](reference-configuration.md#detection-profiles)
+- a colour listed in the run's [detection profile](reference-configuration.md#detection-profiles)
   (built-in: 14 Carbon tokens when `@carbon/*` is configured, 15 MUI v5 tokens when
-  `@mui/*` is; custom: the `tokens` config key), **or**
+  `@mui/*` is; custom: the `tokens` config key). Any notation matches: `#rgb`,
+  `#rrggbb`, `#rrggbbaa`, `rgb()`/`rgba()`, `hsl()`/`hsla()`, including inside
+  Tailwind arbitrary values like `bg-[#0f62fe]`; **or**
+- a `var(--…)` reference to a custom property in the profile's `css_variables`, **or**
 - a class name matching one of the profile's class patterns (built-in: `cds--…` for
-  Carbon, `Mui<Component>-…` for MUI; custom: the `class_prefixes` config key).
+  Carbon, `Mui<Component>-…` for MUI; custom: the `class_prefixes` and
+  `utility_classes` config keys).
 
 ```tsx
 function PriceSlider() {

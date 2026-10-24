@@ -1,5 +1,6 @@
 import * as yaml from 'js-yaml';
 import type { CustomDetection } from './profiles';
+import { normalizeColor } from './colors';
 
 export interface PolderConfig extends CustomDetection {
   componentLibrary: string[];
@@ -12,8 +13,10 @@ export interface PolderConfig extends CustomDetection {
    */
   libraryPaths?: Record<string, string>;
   // Custom detection data (all optional, from CustomDetection):
-  //   tokens          — hex value → token label, powers token-fingerprint
+  //   tokens          — color value (hex/rgb/hsl) → token label, powers token-fingerprint
   //   classPrefixes   — DS class-name prefixes, powers token-fingerprint
+  //   cssVariables    — DS CSS custom property names/prefixes, powers token-fingerprint
+  //   utilityClasses  — Tailwind-style class patterns (`bg-brand-*`), powers token-fingerprint
   //   propSignatures  — DS component → distinctive props, powers prop-match
   //   subComponents   — sub-component element → DS parent, powers subcomponent
   //   nameSegments    — PascalCase word → DS parent, confidence boost only
@@ -26,12 +29,12 @@ interface RawConfig {
   library_paths?: Record<string, unknown>;
   tokens?: Record<string, unknown>;
   class_prefixes?: unknown[];
+  css_variables?: unknown[];
+  utility_classes?: unknown[];
   prop_signatures?: Record<string, unknown>;
   sub_components?: Record<string, unknown>;
   name_segments?: Record<string, unknown>;
 }
-
-const HEX_RE = /^#[0-9a-f]{6}$/;
 
 function requireStringMap(value: unknown, key: string): Record<string, string> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) {
@@ -103,18 +106,20 @@ export function parseConfig(raw: string): PolderConfig {
   return config;
 }
 
-/** Parse + validate the five custom-detection keys from a raw YAML object. */
+/** Parse + validate the custom-detection keys from a raw YAML object. */
 function readCustomKeys(cfg: RawConfig): CustomDetection {
   const out: CustomDetection = {};
 
   if (cfg.tokens !== undefined) {
     const tokens: Record<string, string> = {};
     for (const [k, v] of Object.entries(requireStringMap(cfg.tokens, 'tokens'))) {
-      const hex = k.toLowerCase();
-      if (!HEX_RE.test(hex)) {
-        throw new Error(`tokens keys must be 6-digit hex colors like "#0f62fe" (got "${k}")`);
+      const color = normalizeColor(k);
+      if (!color) {
+        throw new Error(
+          `tokens keys must be colors like "#0f62fe", "#fff", "rgb(15, 98, 254)" or "hsl(219, 99%, 53%)" (got "${k}")`,
+        );
       }
-      tokens[hex] = v;
+      tokens[color.hex] = v;
     }
     out.tokens = tokens;
   }
@@ -124,6 +129,23 @@ function readCustomKeys(cfg: RawConfig): CustomDetection {
       throw new Error('class_prefixes must be an array of non-empty strings');
     }
     out.classPrefixes = cfg.class_prefixes as string[];
+  }
+
+  if (cfg.css_variables !== undefined) {
+    if (
+      !Array.isArray(cfg.css_variables) ||
+      !cfg.css_variables.every((x) => typeof x === 'string' && x.startsWith('--') && x.length > 2)
+    ) {
+      throw new Error('css_variables must be an array of custom property names or prefixes like "--ds-color-"');
+    }
+    out.cssVariables = cfg.css_variables as string[];
+  }
+
+  if (cfg.utility_classes !== undefined) {
+    if (!Array.isArray(cfg.utility_classes) || !cfg.utility_classes.every((x) => typeof x === 'string' && x.length > 0)) {
+      throw new Error('utility_classes must be an array of non-empty class patterns like "bg-brand-*"');
+    }
+    out.utilityClasses = cfg.utility_classes as string[];
   }
 
   if (cfg.prop_signatures !== undefined) {
@@ -157,7 +179,7 @@ function readCustomKeys(cfg: RawConfig): CustomDetection {
 
 /**
  * Parse a generated `.polder.profile.yml` (written by `polder-drift profile`).
- * Accepts only the five custom-detection keys, validated exactly like `.polder.yml`;
+ * Accepts only the custom-detection keys, validated exactly like `.polder.yml`;
  * unknown keys are ignored so the file can carry generator metadata.
  */
 export function parseProfileFile(raw: string): CustomDetection {
